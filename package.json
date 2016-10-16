@@ -1,0 +1,23 @@
+{
+  "name": "exiftool-vendored.exe",
+  "version": "0.0.1",
+  "description": "Vendored win32 ExifTool for Node.js",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mceachen/exiftool-vendored.exe.git"
+  },
+  "keywords": [
+    "ExifTool",
+    "EXIF"
+  ],
+  "author": "Matthew McEachen <matthew-exiftoolvendored@mceachen.org>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mceachen/exiftool-vendored.exe/issues"
+  },
+  "homepage": "https://github.com/mceachen/exiftool-vendored.exe#readme"
+}
