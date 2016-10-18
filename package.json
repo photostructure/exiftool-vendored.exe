@@ -2,7 +2,11 @@
   "name": "exiftool-vendored.exe",
   "version": "10.30.0",
   "description": "Vendored win32 ExifTool for Node.js",
-  "main": "index.js",
+  "main": "./index.js",
+  "files": [
+    "bin",
+    "index.js"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/mceachen/exiftool-vendored.exe.git"
