@@ -3,7 +3,9 @@
   "version": "10.37.0",
   "description": "Vendored win32 ExifTool for Node.js",
   "main": "./index.js",
-  "os": ["win32"],
+  "os": [
+    "win32"
+  ],
   "files": [
     "bin",
     "index.js"
