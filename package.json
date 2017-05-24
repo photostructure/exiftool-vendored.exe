@@ -11,7 +11,7 @@
     "index.js"
   ],
   "bin": {
-    "exiftool": "./bin/exiftool.exe"
+    "exiftool-path": "./exiftool-path.js"
   },
   "repository": {
     "type": "git",
