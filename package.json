@@ -10,9 +10,6 @@
     "bin",
     "index.js"
   ],
-  "bin": {
-    "exiftool": "./bin/exiftool.exe"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/mceachen/exiftool-vendored.exe.git"
