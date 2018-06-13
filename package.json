@@ -1,6 +1,6 @@
 {
   "name": "exiftool-vendored.exe",
-  "version": "10.98.0",
+  "version": "11.01.0-pre",
   "description": "Vendored win32 ExifTool for Node.js",
   "main": "./index.js",
   "os": [
