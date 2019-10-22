@@ -56,7 +56,7 @@ use vars qw($VERSION $AUTOLOAD @formatSize @formatName %formatNumber %intFormat
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::MakerNotes;
 
-$VERSION = '4.23';
+$VERSION = '4.25';
 
 sub ProcessExif($$$);
 sub WriteExif($$$);
@@ -68,6 +68,7 @@ sub ValidateImageData($$$;$);
 sub ProcessTiffIFD($$$);
 sub PrintParameter($$$);
 sub GetOffList($$$$$);
+sub PrintOpcode($);
 sub PrintLensInfo($);
 sub ConvertLensInfo($);
 
@@ -335,6 +336,23 @@ my %sampleFormat = (
     0x102 => 1, # BitsPerSample
     0x103 => 1, # Compression
     0x115 => 1, # SamplesPerPixel
+);
+
+# ID's for DNG OpcodeList tags
+my %opcode = (
+    1 => 'WarpRectilinear',
+    2 => 'WarpFisheye',
+    3 => 'FixVignetteRadial',
+    4 => 'FixBadPixelsConstant',
+    5 => 'FixBadPixelsList',
+    6 => 'TrimBounds',
+    7 => 'MapTable',
+    8 => 'MapPolynomial',
+    9 => 'GainMap',
+    10 => 'DeltaPerRow',
+    11 => 'DeltaPerColumn',
+    12 => 'ScalePerRow',
+    13 => 'ScalePerColumn',
 );
 
 # main EXIF tag table
@@ -1810,14 +1828,14 @@ my %sampleFormat = (
     0x87af => { #30
         Name => 'GeoTiffDirectory',
         Format => 'undef',
-        Binary => 1,
+        Writable => 'int16u',
         Notes => q{
             these "GeoTiff" tags may read and written as a block, but they aren't
             extracted unless specifically requested.  Byte order changes are handled
             automatically when copying between TIFF images with different byte order
         },
-        Writable => 'undef',
         WriteGroup => 'IFD0',
+        Binary => 1,
         RawConv => '$val . GetByteOrder()', # save byte order
         # swap byte order if necessary
         RawConvInv => q{
@@ -1832,9 +1850,9 @@ my %sampleFormat = (
     0x87b0 => { #30
         Name => 'GeoTiffDoubleParams',
         Format => 'undef',
-        Binary => 1,
-        Writable => 'undef',
+        Writable => 'double',
         WriteGroup => 'IFD0',
+        Binary => 1,
         RawConv => '$val . GetByteOrder()', # save byte order
         # swap byte order if necessary
         RawConvInv => q{
@@ -1849,6 +1867,7 @@ my %sampleFormat = (
     },
     0x87b1 => { #30
         Name => 'GeoTiffAsciiParams',
+        Format => 'undef',
         Writable => 'string',
         WriteGroup => 'IFD0',
         Binary => 1,
@@ -3705,6 +3724,8 @@ my %sampleFormat = (
         WriteGroup => 'SubIFD',
         Protected => 1,
         Binary => 1,
+        ConvertBinary => 1,
+        PrintConv => \&PrintOpcode,
         # opcodes:
         # 1 => 'WarpRectilinear',
         # 2 => 'WarpFisheye',
@@ -3726,6 +3747,8 @@ my %sampleFormat = (
         WriteGroup => 'SubIFD',
         Protected => 1,
         Binary => 1,
+        ConvertBinary => 1,
+        PrintConv => \&PrintOpcode,
     },
     0xc74e => { # DNG 1.3
         Name => 'OpcodeList3',
@@ -3733,6 +3756,8 @@ my %sampleFormat = (
         WriteGroup => 'SubIFD',
         Protected => 1,
         Binary => 1,
+        ConvertBinary => 1,
+        PrintConv => \&PrintOpcode,
     },
     0xc761 => { # DNG 1.3
         Name => 'NoiseProfile',
@@ -5097,6 +5122,26 @@ sub PrintCFAPattern($)
         $rtnVal .= '][';
     }
     return $rtnVal . ']';
+}
+
+#------------------------------------------------------------------------------
+# Print Opcode List
+# Inputs: 0) reference to opcode list data
+# Returns: Human-readable opcode list
+sub PrintOpcode($)
+{
+    my $val = shift;
+    return '' unless length $$val > 4;
+    my $num = unpack('N', $$val);
+    my $pos = 4;
+    my ($i, @ops);
+    for ($i=0; $i<$num; ++$i) {
+        $pos + 16 <= length $$val or push(@ops, '<err>'), last;
+        my ($op, $ver, $flags, $len) = unpack("x${pos}N4", $$val);
+        push @ops, $opcode{$op} || "[opcode $op]";
+        $pos += 16 + $len;
+    }
+    return join ', ', @ops;
 }
 
 #------------------------------------------------------------------------------
