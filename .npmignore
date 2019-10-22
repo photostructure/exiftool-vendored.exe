@@ -1,0 +1,8 @@
+# Don't include ExifTool's test files:
+bin/exiftool_files/t/
+
+# Don't include ExifTool's docs:
+bin/exiftool_files/html/
+
+# Don't include tests:
+test/
