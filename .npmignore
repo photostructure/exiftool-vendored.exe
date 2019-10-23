@@ -6,3 +6,9 @@ bin/exiftool_files/html/
 
 # Don't include tests:
 test/
+
+# Don't include strawberry perl files:
+.dl/
+
+# Don't include the ppl copy:
+ppl/
