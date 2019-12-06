@@ -12,7 +12,7 @@ meta information extracted from or written to a file.
 =head1 TAG TABLES
 
 The tables listed below give the names of all tags recognized by ExifTool.
-They contain a total of 23172 tags, with 15146 unique tag names.
+They contain a total of 23196 tags, with 15164 unique tag names.
 
 B<Tag ID>, B<Index#> or B<Sequence> is given in the first column of each
 table.  A B<Tag ID> is the computer-readable equivalent of a tag name, and
@@ -1159,7 +1159,7 @@ to 0 via the API or with --struct on the command line to copy only flattened
 tags, or enabled by setting Struct to 1 via the API or with -struct on the
 command line to copy only as structures.  When writing, the Struct option
 has no effect, and both structured and flattened tags may be written.  See
-L<http://owl.phy.queensu.ca/~phil/exiftool/struct.html> for more details.
+L<https://exiftool.org/struct.html> for more details.
 
 Individual languages for C<lang-alt> tags are accessed by suffixing the tag
 name with a '-', followed by an RFC 3066 language code (eg. "XMP:Title-fr",
@@ -1190,7 +1190,7 @@ recommended if possible.
 For structures, the heading of the first column is B<Field Name>.  Field
 names are very similar to tag names, except they are used to identify fields
 inside structures instead of stand-alone tags.  See
-L<http://owl.phy.queensu.ca/~phil/exiftool/struct.html#Fields> for more
+L<https://exiftool.org/struct.html#Fields> for more
 details.
 
 ExifTool will extract XMP information even if it is not listed in these
@@ -8635,7 +8635,7 @@ Information found in FFF-format .CRS correction image files.
 
 FLIR camera information.  The Planck tags are variables used in the
 temperature calculation.  See
-L<http://u88.n24.queensu.ca/exiftool/forum/index.php?topic=4898.msg23972#msg23972>
+L<https://exiftool.org/forum/index.php?topic=4898.msg23972#msg23972>
 for details.
 
   Index1   Tag Name                             Writable
@@ -16424,6 +16424,39 @@ are less than consistent about their metadata formats.
   0x0087   ResolutionMode                       string
   0x0088   WhiteBalance                         string
   0x008c   Firmware                             string
+  0x011f   CameraCalibration                    float[9]
+  0x0120   WBSettings                           Sigma WBSettings
+  0x0121   WBSettings2                          Sigma WBSettings2
+
+=head3 Sigma WBSettings Tags
+
+  Index4   Tag Name                             Writable
+  ------   --------                             --------
+      0    WB_RGBLevelsAuto                     float[3]
+      3    WB_RGBLevelsDaylight                 float[3]
+      6    WB_RGBLevelsShade                    float[3]
+      9    WB_RGBLevelsOvercast                 float[3]
+     12    WB_RGBLevelsIncandescent             float[3]
+     15    WB_RGBLevelsFluorescent              float[3]
+     18    WB_RGBLevelsFlash                    float[3]
+     21    WB_RGBLevelsCustom1                  float[3]
+     24    WB_RGBLevelsCustom2                  float[3]
+     27    WB_RGBLevelsCustom3                  float[3]
+
+=head3 Sigma WBSettings2 Tags
+
+  Index4   Tag Name                             Writable
+  ------   --------                             --------
+      0    WB_RGBLevelsUnknown0?                float[3]
+      3    WB_RGBLevelsUnknown1?                float[3]
+      6    WB_RGBLevelsUnknown2?                float[3]
+      9    WB_RGBLevelsUnknown3?                float[3]
+     12    WB_RGBLevelsUnknown4?                float[3]
+     15    WB_RGBLevelsUnknown5?                float[3]
+     18    WB_RGBLevelsUnknown6?                float[3]
+     21    WB_RGBLevelsUnknown7?                float[3]
+     24    WB_RGBLevelsUnknown8?                float[3]
+     27    WB_RGBLevelsUnknown9?                float[3]
 
 =head2 Sony Tags
 
@@ -18358,8 +18391,8 @@ These tags apply to CRW-format Canon RAW files and information in the APP0
 length of the information is preserved (and the new information is truncated
 or padded as required) unless B<Writable> is C<resize>. Currently, only
 JpgFromRaw and ThumbnailImage are allowed to change size.  See
-L<http://owl.phy.queensu.ca/~phil/exiftool/canon_raw.html> for a description
-of the Canon CRW format.
+L<https://exiftool.org/canon_raw.html> for a description of the Canon CRW
+format.
 
 CRW images also support the addition of a CanonVRD trailer, which in turn
 supports XMP.  This trailer is created automatically if necessary when
@@ -18710,6 +18743,8 @@ Lens distortion correction information.
   0x1102   FlashFired                           int32u
   0x1105   ZoomPosition                         int32u
   0x1200   LensAttached                         int32u
+  0x1201   LensTypeMake                         int16u
+  0x1202   LensTypeModel                        int16u
   0x1203   FocalLengthIn35mmFormat              int16u
   0x1305   HighISOMode                          int16u
   0x3200   WB_CFA0_LevelDaylight                int16u
@@ -21963,8 +21998,8 @@ written.
 4) ExifTool writes compressed metadata to MIE files if the Compress (-z)
 option is used and Compress::Zlib is available.
 
-See L<http://owl.phy.queensu.ca/~phil/exiftool/MIE1.1-20070121.pdf> for the
-official MIE specification.
+See L<https://exiftool.org/MIE1.1-20070121.pdf> for the official MIE
+specification.
 
   Tag ID               Tag Name                 Writable
   ------               --------                 --------
@@ -33240,7 +33275,7 @@ name.  See L<http://tools.ietf.org/html/rfc5545> for the official iCalendar
 Although basic text files contain no metadata, the following tags are
 determined from a simple analysis of the text data.  LineCount and WordCount
 are generated only for 8-bit encodings, but the FastScan (-fast) option may
-be used to limit processing to the first 64 kB, in which case these two tags
+be used to limit processing to the first 64 kB in which case these two tags
 are not produced.  To avoid long processing delays, ExifTool will issue a
 minor warning and process only the first 64 kB of any file larger than 20 MB
 unless the IgnoreMinorErrors (-m) option is used.
@@ -33976,6 +34011,8 @@ values, may created via the ExifTool configuration file.
                        MaxApertureValue
   LensSpec             Nikon:Lens               no
                        Nikon:LensType
+  LensType             LensTypeMake             no
+                       LensTypeModel
   LightValue           Aperture                 no
                        ShutterSpeed
                        ISO

@@ -63,8 +63,8 @@
 #              47) http://www.exiv2.org/
 #              48) Tomasz A. Kawecki private communication (550D, firmware 1.0.6, 1.0.8)
 #              49) http://www.listware.net/201101/digikam-users/49795-digikam-users-re-lens-recognition.html
-#              50) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,3833.0.html
-#              51) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,4110.0.html
+#              50) https://exiftool.org/forum/index.php/topic,3833.0.html
+#              51) https://exiftool.org/forum/index.php/topic,4110.0.html
 #              52) Kai Harrekilde-Petersen private communication
 #              53) Anton Reiser private communication
 #              54) https://github.com/lclevy/canon_cr3
@@ -88,7 +88,7 @@ sub ProcessCTMD($$$);
 sub ProcessExifInfo($$$);
 sub SwapWords($);
 
-$VERSION = '4.27';
+$VERSION = '4.28';
 
 # Note: Removed 'USM' from 'L' lenses since it is redundant - PH
 # (or is it?  Ref 32 shows 5 non-USM L-type lenses)
@@ -550,6 +550,7 @@ $VERSION = '4.27';
     4158 => 'Canon EF-S 18-55mm f/4-5.6 IS STM', #PH
     4159 => 'Canon EF-M 32mm f/1.4 STM', #42
     4160 => 'Canon EF-S 35mm f/2.8 Macro IS STM', #42
+    4208 => 'Sigma 56mm f/1.4 DC DN | C', #forum10603
     # (Nano USM lenses - 0x90xx)
     36910 => 'Canon EF 70-300mm f/4-5.6 IS II USM', #42
     36912 => 'Canon EF-S 18-135mm f/3.5-5.6 IS USM', #42
@@ -2068,7 +2069,7 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
             4 => 'Continuous, Low', #PH
             5 => 'Continuous, High', #PH
             6 => 'Silent Single', #PH
-            # ref A: http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,5701.msg27843.html#msg27843
+            # ref A: https://exiftool.org/forum/index.php/topic,5701.msg27843.html#msg27843
             9 => 'Single, Silent', #A
             10 => 'Continuous, Silent', #A
             # 11 - seen for SX260
