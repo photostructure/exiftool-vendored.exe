@@ -49,7 +49,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 require Exporter;
 
-$VERSION = '3.29';
+$VERSION = '3.30';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(EscapeXML UnescapeXML);
 
@@ -62,7 +62,7 @@ sub EncodeBase64($;$);
 sub SaveBlankInfo($$$;$);
 sub ProcessBlankInfo($$$;$);
 sub ValidateXMP($;$);
-sub ValidateProperty($$);
+sub ValidateProperty($$;$);
 sub UnescapeChar($$;$);
 sub AddFlattenedTags($;$$);
 sub FormatXMPDate($);
@@ -186,7 +186,7 @@ my %xmpNS = (
 );
 
 # build reverse namespace lookup
-my %uri2ns;
+my %uri2ns = ( 'http://ns.exiftool.org/1.0/' => 'et' ); # (allow exiftool.org as well as exiftool.ca)
 {
     my $ns;
     foreach $ns (keys %nsURI) {
@@ -3103,7 +3103,7 @@ NoLoop:
 
         # add tag Namespace entry for tags in variable-namespace tables
         $$tagInfo{Namespace} = $xns if $xns;
-        if ($$et{curURI}{$ns} and $$et{curURI}{$ns} =~ m{^http://ns.exiftool.ca/(.*?)/(.*?)/}) {
+        if ($$et{curURI}{$ns} and $$et{curURI}{$ns} =~ m{^http://ns.exiftool.(?:ca|org)/(.*?)/(.*?)/}) {
             my %grps = ( 0 => $1, 1 => $2 );
             # apply a little magic to recover original group names
             # from this exiftool-written RDF/XML file
@@ -3607,7 +3607,7 @@ sub ParseXMPElement($$$;$$$$)
                         # ignore et:desc, and et:val if preceded by et:prt
                         --$count;
                     } else {
-                        ValidateProperty($et, $propList) if $$et{XmpValidate};
+                        ValidateProperty($et, $propList, \%attrs) if $$et{XmpValidate};
                         &$foundProc($et, $tagTablePtr, $propList, $val, \%attrs);
                     }
                 }
@@ -3681,6 +3681,7 @@ sub ProcessXMP($$;$)
     $$et{definedNS} = { };
     delete $$et{XmpAbout};
     delete $$et{XmpValidate};   # don't validate by default
+    delete $$et{XmpValidateLangAlt};
 
     # ignore non-standard XMP while in strict MWG compatibility mode
     if (($Image::ExifTool::MWG::strict or $$et{OPTIONS}{Validate}) and
