@@ -333,7 +333,7 @@ sub Cleanup() {
 #
 
 # add arguments embedded in filename (Windows .exe version only)
-if ($^X =~ /\(([^\\\/]+)\)(.exe|.pl)?$/i) {
+if ($0 =~ /\(([^\\\/]+)\)(.exe|.pl)?$/i) {
     my $argstr = $1;
     # divide into separate quoted or whitespace-delineated arguments
     my (@args, $arg, $quote);

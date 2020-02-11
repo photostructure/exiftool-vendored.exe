@@ -88,7 +88,7 @@ sub ProcessCTMD($$$);
 sub ProcessExifInfo($$$);
 sub SwapWords($);
 
-$VERSION = '4.30';
+$VERSION = '4.34';
 
 # Note: Removed 'USM' from 'L' lenses since it is redundant - PH
 # (or is it?  Ref 32 shows 5 non-USM L-type lenses)
@@ -401,7 +401,7 @@ $VERSION = '4.30';
     195 => 'Canon EF 35-105mm f/4.5-5.6 USM', #32
     196 => 'Canon EF 75-300mm f/4-5.6 USM', #15/32
     197 => 'Canon EF 75-300mm f/4-5.6 IS USM or Sigma Lens',
-    197.1 => 'Sigma 18-300mm f/3.5-6.3 DC Macro OS HS', #50
+    197.1 => 'Sigma 18-300mm f/3.5-6.3 DC Macro OS HSM', #50
     198 => 'Canon EF 50mm f/1.4 USM or Other Lens',
     198.1 => 'Zeiss Otus 55mm f/1.4 ZE', #JR (seen only on Sony camera)
     198.2 => 'Zeiss Otus 85mm f/1.4 ZE', #JR (NC)
@@ -570,6 +570,7 @@ $VERSION = '4.30';
     61182.4 => 'Canon RF 85mm F1.2L USM', #IB
     61182.5 => 'Canon RF 24-240mm F4-6.3 IS USM', #IB
     61182.6 => 'Canon RF 24-70mm F2.8 L IS USM', #PH
+    61182.7 => 'Canon RF 15-35mm F2.8 L IS USM', #PH
     65535 => 'n/a',
 );
 
@@ -900,7 +901,7 @@ $VERSION = '4.30';
     0x80000325 => 'EOS 70D',
     0x80000326 => 'EOS Rebel T5i / 700D / Kiss X7i',
     0x80000327 => 'EOS Rebel T5 / 1200D / Kiss X70 / Hi',
-    0x80000328 => 'EOS-1D X MARK II', #42
+    0x80000328 => 'EOS-1D X Mark II', #42
     0x80000331 => 'EOS M',
     0x80000350 => 'EOS 80D', #42
     0x80000355 => 'EOS M2',
@@ -917,10 +918,13 @@ $VERSION = '4.30';
     0x80000417 => 'EOS Rebel SL2 / 200D / Kiss X9', #IB/42
     0x80000422 => 'EOS Rebel T100 / 4000D / 3000D', #IB (3000D in China; Kiss? - PH)
     0x80000424 => 'EOS R', #IB
+    0x80000428 => 'EOS-1D X Mark III', #IB
     0x80000432 => 'EOS Rebel T7 / 2000D / 1500D / Kiss X90', #IB
     0x80000433 => 'EOS RP',
     0x80000436 => 'EOS SL3 / 250D / Kiss X10', #25
     0x80000437 => 'EOS 90D', #IB
+    0x80000520 => 'EOS D2000C', #IB
+    0x80000560 => 'EOS D6000C', #PH (guess)
 );
 
 my %canonQuality = (
@@ -1588,7 +1592,10 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
         ValueConv => 'unpack("H*", $val)',
         ValueConvInv => 'pack("H*", $val)',
     },
-    # 0x29 - WBInfo (ref IB, offset 0x6 is int32u[4] WB_GRBGLevels as shot for PowerShot G9)
+    0x29 => { #IB (G9)
+        Name => 'WBInfo',
+        SubDirectory => { TagTable => 'Image::ExifTool::Canon::WBInfo' },
+    },
     # 0x2d - changes with categories (ref 31)
     0x2f => { #PH (G12)
         Name => 'FaceDetect3',
@@ -1597,6 +1604,8 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
             TagTable => 'Image::ExifTool::Canon::FaceDetect3',
         },
     },
+    # 0x32 - if length is 768, starting at offset 4 there are 6 RGGB 1/val int16 records:
+    #        daylight,cloudy,tungsten,fluorescent,flash,kelvin (D30 2001, ref IB)
     0x35 => { #PH
         Name => 'TimeInfo',
         SubDirectory => {
@@ -6427,6 +6436,25 @@ my %ciMaxFocal = (
     0x02 => 'FacesDetected',
 );
 
+# G9 white balance information (MakerNotes tag 0x29) (ref IB)
+%Image::ExifTool::Canon::WBInfo = (
+    %binaryDataAttrs,
+    NOTES => 'WB tags for the Canon G9.',
+    FORMAT => 'int32u',
+    FIRST_ENTRY => 1,
+    GROUPS => { 0 => 'MakerNotes', 2 => 'Image' },
+    0x02 => { Name => 'WB_GRGBLevelsAuto',        Format => 'int32s[4]' },
+    0x0a => { Name => 'WB_GRGBLevelsDaylight',    Format => 'int32s[4]' },
+    0x12 => { Name => 'WB_GRGBLevelsCloudy',      Format => 'int32s[4]' },
+    0x1a => { Name => 'WB_GRGBLevelsTungsten',    Format => 'int32s[4]' },
+    0x22 => { Name => 'WB_GRGBLevelsFluorescent', Format => 'int32s[4]' },
+    0x2a => { Name => 'WB_GRGBLevelsFluorHigh',   Format => 'int32s[4]' },
+    0x32 => { Name => 'WB_GRGBLevelsFlash',       Format => 'int32s[4]' },
+    0x3a => { Name => 'WB_GRGBLevelsUnderwater',  Format => 'int32s[4]' },
+    0x42 => { Name => 'WB_GRGBLevelsCustom1',     Format => 'int32s[4]' },
+    0x4a => { Name => 'WB_GRGBLevelsCustom2',     Format => 'int32s[4]' },
+);
+
 # yet more face detect information (MakerNotes tag 0x2f) - PH (G12)
 %Image::ExifTool::Canon::FaceDetect3 = (
     %binaryDataAttrs,
@@ -9632,7 +9660,7 @@ Canon maker notes in EXIF information.
 
 =head1 AUTHOR
 
-Copyright 2003-2019, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

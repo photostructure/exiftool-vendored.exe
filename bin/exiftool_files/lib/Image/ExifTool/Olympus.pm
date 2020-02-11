@@ -39,7 +39,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::APP12;
 
-$VERSION = '2.62';
+$VERSION = '2.63';
 
 sub PrintLensInfo($$$);
 
@@ -416,6 +416,7 @@ my %olympusCameraTypes = (
     S0068 => 'E-M10MarkIII',
     S0076 => 'E-PL9', #IB
     S0080 => 'E-M1X', #IB
+    S0085 => 'E-PL10', #IB
     S0089 => 'E-M5MarkIII',
     SR45 => 'D220',
     SR55 => 'D320L',
@@ -4034,7 +4035,7 @@ Olympus or Epson maker notes in EXIF information.
 
 =head1 AUTHOR
 
-Copyright 2003-2019, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
