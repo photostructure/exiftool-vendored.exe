@@ -19,7 +19,7 @@ if [ ! -f $DEST ] ; then
   curl -o $DEST https://oliverbetz.de/cms/files/Artikel/ExifTool-for-Windows/perl-5.30.0.1_for_ExifTool.zip
 fi
 
-if [ $(sha1sum $DEST | cut -d' ' -f1 ) != "1cf1c2293e703bb0cd7673ae051ed08d1eb64952"] ; then
+if [ $(sha1sum $DEST | cut -d' ' -f1 ) != "1cf1c2293e703bb0cd7673ae051ed08d1eb64952" ] ; then
   echo "checksum did not match for $DEST. Exitting."
   rm $DEST
   exit 1
