@@ -36,7 +36,7 @@ cp -rp ../exiftool/* bin/exiftool_files
 rm bin/exiftool_files/exiftool
 mv bin/exiftool_files/windows_exiftool bin/exiftool_files/exiftool.pl
 
-# Apply Oliver's patches:
+# Apply Oliver's patches. Built with `git diff -up`
 patch bin/exiftool_files/exiftool.pl << 'EOF'
 @@ -332,7 +332,7 @@
  #
@@ -49,15 +49,15 @@ patch bin/exiftool_files/exiftool.pl << 'EOF'
      my (@args, $arg, $quote);
 EOF
 patch bin/exiftool_files/lib/Image/ExifTool.pm << 'EOF'
-@@ -8445,7 +8445,7 @@ until ($Image::ExifTool::noConfig) {
+@@ -8519,7 +8519,7 @@ until ($Image::ExifTool::noConfig) {
          $file = $config;
      }
      # also check executable directory unless path is absolute
--    -r $file or $config =~ /^\// or $file = ($0 =~ /(.*[\\\/])/ ? $1 : './') . $config;
-+    -r $file or $config =~ /^\// or $file = ($^X =~ /(.*[\\\/])/ ? $1 : './') . $config;
+-    $exePath = $0 unless defined $exePath; # (undocumented $exePath setting)
++    $exePath = $^X unless defined $exePath; # (undocumented $exePath setting)
+     -r $file or $config =~ /^\// or $file = ($exePath =~ /(.*[\\\/])/ ? $1 : './') . $config;
      unless (-r $file) {
          warn("Config file not found\n") if defined $Image::ExifTool::configFile;
-         last;
 EOF
 
 # exiftool never has a patch version:

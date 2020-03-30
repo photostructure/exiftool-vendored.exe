@@ -4309,15 +4309,15 @@ my %binaryDataAttrs = (
         Name => 'LC3',
         %lensCode,
     },
-    5 => { # LC4 = abberation correction, near distance data
+    5 => { # LC4 = aberration correction, near distance data
         Name => 'LC4',
         %lensCode,
     },
-    6 => { # LC5 = light color abberation correction data
+    6 => { # LC5 = light color aberration correction data
         Name => 'LC5',
         %lensCode,
     },
-    7 => { # LC6 = open abberation data
+    7 => { # LC6 = open aberration data
         Name => 'LC6',
         %lensCode,
     },

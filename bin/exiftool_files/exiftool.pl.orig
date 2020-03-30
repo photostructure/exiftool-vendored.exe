@@ -10,13 +10,15 @@
 use strict;
 require 5.004;
 
-my $version = '11.86';
+my $version = '11.91';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exeDir;
 BEGIN {
+    # (undocumented -xpath option added in 11.91, must come before other options)
+    $Image::ExifTool::exePath = @ARGV && lc($ARGV[0]) eq '-xpath' && shift() ? $^X : $0;
     # get exe directory
-    $exeDir = ($0 =~ /(.*)[\\\/]/) ? $1 : '.';
+    $exeDir = ($Image::ExifTool::exePath =~ /(.*)[\\\/]/) ? $1 : '.';
     # (no link following for Windows exe version)
     # add lib directory at start of include path
     unshift @INC, "$exeDir/lib";
@@ -520,6 +522,7 @@ my @fileOrder;      # tags to use for ordering of input files
 my $fileOrderFast;  # -fast level for -fileOrder option
 my $addGeotime;     # automatically added geotime argument
 my $doGlob;         # flag set to do filename wildcard expansion
+my $endOfOpts;      # flag set if "--" option encountered
 my $escapeXML;      # flag to escape printed values for xml
 my $setTagsFile;    # filename for last TagsFromFile option
 my $sortOpt;        # sort option is used
@@ -556,7 +559,7 @@ if (not $preserveTime and $^O eq 'MSWin32') {
 for (;;) {
 
   # execute the command now if no more arguments or -execute is used
-  if (not @ARGV or $ARGV[0] =~ /^(-|\xe2\x88\x92)execute(\d*)$/i) {
+  if (not @ARGV or ($ARGV[0] =~ /^(-|\xe2\x88\x92)execute(\d*)$/i and not $endOfOpts)) {
     if (@ARGV) {
         $executeID = $2;        # save -execute number for "{ready}" response
         $helped = 1;            # don't show help if we used -execute
@@ -607,6 +610,7 @@ for (;;) {
         # process arguments which were deferred to the next pass
         unshift @ARGV, @nextPass;
         undef @nextPass;
+        undef $endOfOpts;
         ++$pass;
         next;
     }
@@ -616,8 +620,14 @@ for (;;) {
   $_ = shift;
   next if $badCmd;      # flush remaining arguments if aborting this command
 
-  if (s/^(-|\xe2\x88\x92)//) {  # allow funny dashes (nroff dash bug for cut-n-paste from pod)
+  # allow funny dashes (nroff dash bug for cut-n-paste from pod)
+  if (not $endOfOpts and s/^(-|\xe2\x88\x92)//) {
     s/^\xe2\x88\x92/-/;         # translate double-dash too
+    if ($_ eq '-') {
+        $pass or push @nextPass, '--';
+        $endOfOpts = 1;
+        next;
+    }
     my $a = lc $_;
     if (/^list([wfrdx]|wf|g(\d*))?$/i) {
         $pass or push @nextPass, "-$_";
@@ -850,7 +860,7 @@ for (;;) {
     (/^e$/ or $a eq '-composite') and $mt->Options(Composite => 0), next;
     (/^-e$/ or $a eq 'composite') and $mt->Options(Composite => 1), next;
     (/^E$/ or $a eq 'escapehtml') and require Image::ExifTool::HTML and $escapeHTML = 1, next;
-    ($a eq 'ec' or $a eq 'escapec') and $escapeC = 1, next; # (undocumented) added in 11.54
+    ($a eq 'ec' or $a eq 'escapec') and $escapeC = 1, next;
     ($a eq 'ex' or $a eq 'escapexml') and $escapeXML = 1, next;
     if (/^echo(\d)?$/i) {
         my $n = $1 || 1;
@@ -3228,10 +3238,10 @@ sub FormatCSV($)
     {
         $val = 'base64:' . Image::ExifTool::XMP::EncodeBase64($val, 1);
     }
-    # currently, the value may contain NULL characters.  It is unclear
-    # whether or not this is valid CSV, but some readers may not like it.
-    # (if this becomes a problem, in the future values may need to be truncated at
-    # the first NULL character, but this would disable the use of CSV for binary data)
+    # currently, there is a chance that the value may contain NULL characters unless
+    # the -b option is used to encode as Base64.  It is unclear whether or not this
+    # is valid CSV, but some readers may not like it.  (If this becomes a problem,
+    # in the future values may need to be truncated at the first NULL character.)
     $val = qq{"$val"} if $val =~ s/"/""/g or $val =~ /(^\s+|\s+$)/ or $val =~ /[,\n\r]/;
     return $val;
 }
@@ -3795,7 +3805,7 @@ sub SuggestedExtension($$$)
         $ext = 'vrd';
     } elsif ($$valPt =~ /^IIII\x04\0\x04\0/) {
         $ext = 'dr4';
-    } elsif ($$valPt =~ /^(.{10}|.{522})(\x11\x01|\x00\x11)/) {
+    } elsif ($$valPt =~ /^(.{10}|.{522})(\x11\x01|\x00\x11)/s) {
         $ext = 'pict';
     } else {
         $ext = 'dat';
@@ -4302,34 +4312,35 @@ DESCRIPTION
 
       File Types
       ------------+-------------+-------------+-------------+------------
-      3FR   r     | DSS   r     | J2C   r     | ODS   r     | RSRC  r
-      3G2   r/w   | DV    r     | JNG   r/w   | ODT   r     | RTF   r
-      3GP   r/w   | DVB   r/w   | JP2   r/w   | OFR   r     | RW2   r/w
-      A     r     | DVR-MS r    | JPEG  r/w   | OGG   r     | RWL   r/w
-      AA    r     | DYLIB r     | JSON  r     | OGV   r     | RWZ   r
-      AAE   r     | EIP   r     | K25   r     | OPUS  r     | RM    r
-      AAX   r/w   | EPS   r/w   | KDC   r     | ORF   r/w   | SEQ   r
-      ACR   r     | EPUB  r     | KEY   r     | OTF   r     | SKETCH r
-      AFM   r     | ERF   r/w   | LA    r     | PAC   r     | SO    r
-      AI    r/w   | EXE   r     | LFP   r     | PAGES r     | SR2   r/w
-      AIFF  r     | EXIF  r/w/c | LNK   r     | PBM   r/w   | SRF   r
-      APE   r     | EXR   r     | LRV   r/w   | PCD   r     | SRW   r/w
-      ARQ   r/w   | EXV   r/w/c | M2TS  r     | PCX   r     | SVG   r
-      ARW   r/w   | F4A/V r/w   | M4A/V r/w   | PDB   r     | SWF   r
-      ASF   r     | FFF   r/w   | MAX   r     | PDF   r/w   | THM   r/w
-      AVI   r     | FITS  r     | MEF   r/w   | PEF   r/w   | TIFF  r/w
-      AVIF  r/w   | FLA   r     | MIE   r/w/c | PFA   r     | TORRENT r
-      AZW   r     | FLAC  r     | MIFF  r     | PFB   r     | TTC   r
-      BMP   r     | FLIF  r/w   | MKA   r     | PFM   r     | TTF   r
-      BPG   r     | FLV   r     | MKS   r     | PGF   r     | TXT   r
-      BTF   r     | FPF   r     | MKV   r     | PGM   r/w   | VCF   r
-      CHM   r     | FPX   r     | MNG   r/w   | PLIST r     | VRD   r/w/c
-      COS   r     | GIF   r/w   | MOBI  r     | PICT  r     | VSD   r
-      CR2   r/w   | GPR   r/w   | MODD  r     | PMP   r     | WAV   r
-      CR3   r/w   | GZ    r     | MOI   r     | PNG   r/w   | WDP   r/w
-      CRM   r/w   | HDP   r/w   | MOS   r/w   | PPM   r/w   | WEBP  r
-      CRW   r/w   | HDR   r     | MOV   r/w   | PPT   r     | WEBM  r
-      CS1   r/w   | HEIC  r/w   | MP3   r     | PPTX  r     | WMA   r
+      3FR   r     | DR4   r/w/c | ITC   r     | ODP   r     | RIFF  r
+      3G2   r/w   | DSS   r     | J2C   r     | ODS   r     | RSRC  r
+      3GP   r/w   | DV    r     | JNG   r/w   | ODT   r     | RTF   r
+      A     r     | DVB   r/w   | JP2   r/w   | OFR   r     | RW2   r/w
+      AA    r     | DVR-MS r    | JPEG  r/w   | OGG   r     | RWL   r/w
+      AAE   r     | DYLIB r     | JSON  r     | OGV   r     | RWZ   r
+      AAX   r/w   | EIP   r     | K25   r     | OPUS  r     | RM    r
+      ACR   r     | EPS   r/w   | KDC   r     | ORF   r/w   | SEQ   r
+      AFM   r     | EPUB  r     | KEY   r     | OTF   r     | SKETCH r
+      AI    r/w   | ERF   r/w   | LA    r     | PAC   r     | SO    r
+      AIFF  r     | EXE   r     | LFP   r     | PAGES r     | SR2   r/w
+      APE   r     | EXIF  r/w/c | LNK   r     | PBM   r/w   | SRF   r
+      ARQ   r/w   | EXR   r     | LRV   r/w   | PCD   r     | SRW   r/w
+      ARW   r/w   | EXV   r/w/c | M2TS  r     | PCX   r     | SVG   r
+      ASF   r     | F4A/V r/w   | M4A/V r/w   | PDB   r     | SWF   r
+      AVI   r     | FFF   r/w   | MAX   r     | PDF   r/w   | THM   r/w
+      AVIF  r/w   | FITS  r     | MEF   r/w   | PEF   r/w   | TIFF  r/w
+      AZW   r     | FLA   r     | MIE   r/w/c | PFA   r     | TORRENT r
+      BMP   r     | FLAC  r     | MIFF  r     | PFB   r     | TTC   r
+      BPG   r     | FLIF  r/w   | MKA   r     | PFM   r     | TTF   r
+      BTF   r     | FLV   r     | MKS   r     | PGF   r     | TXT   r
+      CHM   r     | FPF   r     | MKV   r     | PGM   r/w   | VCF   r
+      COS   r     | FPX   r     | MNG   r/w   | PLIST r     | VRD   r/w/c
+      CR2   r/w   | GIF   r/w   | MOBI  r     | PICT  r     | VSD   r
+      CR3   r/w   | GPR   r/w   | MODD  r     | PMP   r     | WAV   r
+      CRM   r/w   | GZ    r     | MOI   r     | PNG   r/w   | WDP   r/w
+      CRW   r/w   | HDP   r/w   | MOS   r/w   | PPM   r/w   | WEBP  r
+      CS1   r/w   | HDR   r     | MOV   r/w   | PPT   r     | WEBM  r
+      CSV   r     | HEIC  r/w   | MP3   r     | PPTX  r     | WMA   r
       DCM   r     | HEIF  r/w   | MP4   r/w   | PS    r/w   | WMV   r
       DCP   r/w   | HTML  r     | MPC   r     | PSB   r/w   | WTV   r
       DCR   r     | ICC   r/w/c | MPG   r     | PSD   r/w   | WV    r
@@ -4341,7 +4352,6 @@ DESCRIPTION
       DOC   r     | INSV  r     | NRW   r/w   | RAM   r     | ZIP   r
       DOCX  r     | INX   r     | NUMBERS r   | RAR   r     |
       DPX   r     | ISO   r     | O     r     | RAW   r/w   |
-      DR4   r/w/c | ITC   r     | ODP   r     | RIFF  r     |
 
       Meta Information
       ----------------------+----------------------+---------------------
@@ -4372,7 +4382,7 @@ OPTIONS
     practice, options may appear after source file names on the exiftool
     command line.
 
-  Option Summary
+  Option Overview
     Tag operations
 
       -TAG or --TAG                    Extract or exclude specified tag
@@ -4392,7 +4402,7 @@ OPTIONS
       -csv[[+]=CSVFILE]                Export/import tags in CSV format
       -d FMT      (-dateFormat)        Set format for date/time values
       -D          (-decimal)           Show tag ID numbers in decimal
-      -E, -ex     (-escape(HTML|XML))  Escape values for HTML (-E) or XML (-ex)
+      -E,-ex,-ec  (-escape(HTML|XML|C))Escape tag values for HTML, XML or C
       -f          (-forcePrint)        Force printing of all specified tags
       -g[NUM...]  (-groupHeadings)     Organize output by tag group
       -G[NUM...]  (-groupNames)        Print group name for each tag
@@ -4423,7 +4433,7 @@ OPTIONS
     Processing control
 
       -a          (-duplicates)        Allow duplicate tags to be extracted
-      -e          (--composite)        Do not calculate composite tags
+      -e          (--composite)        Do not generate composite tags
       -ee         (-extractEmbedded)   Extract information from embedded files
       -ext[+] EXT (-extension)         Process files with specified extension
       -F[OFFSET]  (-fixBase)           Fix the base for maker notes offsets
@@ -4452,6 +4462,7 @@ OPTIONS
       -k          (-pause)             Pause before terminating
       -list[w|f|wf|g[NUM]|d|x]         List various exiftool capabilities
       -ver                             Print exiftool version number
+      --                               End of options
 
     Special features
 
@@ -4984,13 +4995,14 @@ OPTIONS
     -D (-decimal)
          Show tag ID number in decimal when extracting information.
 
-    -E, -ex (-escapeHTML, -escapeXML)
-         Escape characters in output values for HTML (-E) or XML (-ex). For
-         HTML, all characters with Unicode code points above U+007F are
-         escaped as well as the following 5 characters: & (&amp;) ' (&#39;)
-         " (&quot;) > (&gt;) and < (&lt;). For XML, only these 5 characters
-         are escaped. The -E option is implied with -h, and -ex is implied
-         with -X. The inverse conversion is applied when writing tags.
+    -E, -ex, -ec (-escapeHTML, -escapeXML, -escapeC)
+         Escape characters in output tag values for HTML (-E), XML (-ex) or
+         C (-ec). For HTML, all characters with Unicode code points above
+         U+007F are escaped as well as the following 5 characters: & (&amp;)
+         ' (&#39;) " (&quot;) > (&gt;) and < (&lt;). For XML, only these 5
+         characters are escaped. The -E option is implied with -h, and -ex
+         is implied with -X. For C, all control characters and the backslash
+         are escaped. The inverse conversion is applied when writing tags.
 
     -f (-forcePrint)
          Force printing of tags even if their values are not found. This
@@ -5189,10 +5201,10 @@ OPTIONS
          The argument is interpreted as a string unless a file of that name
          exists, in which case the string is loaded from the contents of the
          file. Tag names in the format file or string begin with a "$"
-         symbol and may contain a leading group names and/or a trailing "#".
-         Case is not significant. Braces "{}" may be used around the tag
-         name to separate it from subsequent text. Use $$ to represent a "$"
-         symbol, and $/ for a newline.
+         symbol and may contain leading group names and/or a trailing "#"
+         (to disable print conversion). Case is not significant. Braces "{}"
+         may be used around the tag name to separate it from subsequent
+         text. Use $$ to represent a "$" symbol, and $/ for a newline.
 
          Multiple -p options may be used, each contributing a line (or more)
          of text to the output. Lines beginning with "#[HEAD]" and "#[TAIL]"
@@ -5219,7 +5231,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 11.86 --
+             -- Generated by ExifTool 11.91 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -5555,7 +5567,7 @@ OPTIONS
          always extracted when copying.
 
     -e (--composite)
-         Extract existing tags only -- don't calculate composite tags.
+         Extract existing tags only -- don't generate composite tags.
 
     -ee (-extractEmbedded)
          Extract information from embedded documents in EPS files, embedded
@@ -5803,16 +5815,20 @@ OPTIONS
          results in slower performance, so the -overwrite_original option
          should be used instead unless necessary.
 
+         Note that this option reverts to the behaviour of the
+         -overwrite_original option when also writing the FileName and/or
+         Directory tags.
+
     -P (-preserve)
          Preserve the filesystem modification date/time ("FileModifyDate")
          of the original file when writing. Note that some filesystems store
-         a creation date (Windows "FileCreateDate" or Mac
-         "MDItemFSCreationDate") which is not affected by this option. The
-         creation date is preserved on Windows systems where Win32API::File
-         and Win32::API are available regardless of this setting. For other
-         systems, the -overwrite_original_in_place option may be used if
-         necessary to preserve the creation date. This option is superseded
-         by any value written to the FileModifyDate tag.
+         a creation date (ie. "FileCreateDate" on Windows and Mac systems)
+         which is not affected by this option. This creation date is
+         preserved on Windows systems where Win32API::File and Win32::API
+         are available regardless of this setting. For other systems, the
+         -overwrite_original_in_place option may be used if necessary to
+         preserve the creation date. The -P option is superseded by any
+         value written to the FileModifyDate tag.
 
     -password *PASSWD*
          Specify password to allow processing of password-protected PDF
@@ -5980,6 +5996,9 @@ OPTIONS
          addition system information (see the README file of the full
          distribution for more details about optional libraries), or -v2 to
          also list the Perl include directories.
+
+    --   Indicates the end of options. Any remaining arguments are treated
+         as file names, even if they begin with a dash ("-").
 
    Special features
     -geotag *TRKFILE*
@@ -6363,7 +6382,7 @@ WRITING READ-ONLY FILES
     -overwrite_original option is used, or b) the "_original" backup already
     exists.
 
-    Hidden files in Windows behave as read-only files when attemping to
+    Hidden files in Windows behave as read-only files when attempting to
     write any real tags to the file -- an error is generated when using the
     -overwrite_original_in_place, otherwise writing should be successful and
     the hidden attribute will be removed. But the -if option may be used to

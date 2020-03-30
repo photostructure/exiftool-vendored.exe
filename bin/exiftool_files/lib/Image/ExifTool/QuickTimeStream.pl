@@ -15,7 +15,11 @@ package Image::ExifTool::QuickTime;
 
 use strict;
 
+use Image::ExifTool qw(:DataAccess :Utils);
+use Image::ExifTool::QuickTime;
+
 sub Process_tx3g($$$);
+sub Process_mebx($$$);
 sub ProcessFreeGPS($$$);
 sub ProcessFreeGPS2($$$);
 
@@ -560,7 +564,7 @@ sub SaveMetaKeys($$$)
         my ($tagID, $format, $pid);
         if ($verbose) {
             $pid = PrintableTagID($id,1);
-            $et->VPrint(0, "$oldIndent+ [Metdata Key entry, Local ID=$pid, $size bytes]\n");
+            $et->VPrint(0, "$oldIndent+ [Metadata Key entry, Local ID=$pid, $size bytes]\n");
             $$et{INDENT} .= '| ';
         }
 

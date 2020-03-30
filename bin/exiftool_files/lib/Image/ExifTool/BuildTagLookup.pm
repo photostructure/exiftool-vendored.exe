@@ -35,7 +35,7 @@ use Image::ExifTool::Sony;
 use Image::ExifTool::Validate;
 use Image::ExifTool::MacOS;
 
-$VERSION = '3.32';
+$VERSION = '3.34';
 @ISA = qw(Exporter);
 
 sub NumbersFirst($$);
@@ -318,7 +318,7 @@ When reading, C<struct> tags are extracted only if the L<Struct|../ExifTool.html
 option is used.  Otherwise the corresponding I<Flattened> tags, indicated by
 an underline (C<_>) after the B<Writable> type, are extracted.  When
 copying, by default both structured and flattened tags are available, but
-the flattened tags are considered "unsafe" so they they aren't copied unless
+the flattened tags are considered "unsafe" so they aren't copied unless
 specified explicitly.  The L<Struct|../ExifTool.html#Struct> option may be disabled by setting Struct
 to 0 via the API or with --struct on the command line to copy only flattened
 tags, or enabled by setting Struct to 1 via the API or with -struct on the
@@ -1170,7 +1170,7 @@ TagID:  foreach $tagID (@keys) {
                             my $n = scalar @values;
                             my ($bits, $i, $v);
                             foreach (@pk) {
-                                next if $_ eq '';
+                                next if $_ eq '' and $$printConv{$_} eq '';
                                 $_ eq 'BITMASK' and $bits = $$printConv{$_}, next;
                                 $_ eq 'OTHER' and next;
                                 my $index;
@@ -1474,7 +1474,7 @@ TagID:  foreach $tagID (@keys) {
         my $tag;
         foreach $tag (sort keys %$struct) {
             my $tagInfo = $$struct{$tag};
-            next unless ref $tagInfo eq 'HASH';
+            next unless ref $tagInfo eq 'HASH' and $tag ne 'NAMESPACE';
             my $writable = $$tagInfo{Writable};
             my @vals;
             unless ($writable) {
