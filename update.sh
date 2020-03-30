@@ -36,18 +36,7 @@ cp -rp ../exiftool/* bin/exiftool_files
 rm bin/exiftool_files/exiftool
 mv bin/exiftool_files/windows_exiftool bin/exiftool_files/exiftool.pl
 
-# Apply Oliver's patches. Built with `git diff -up`
-patch bin/exiftool_files/exiftool.pl << 'EOF'
-@@ -332,7 +332,7 @@
- #
- 
- # add arguments embedded in filename (Windows .exe version only)
--if ($0 =~ /\(([^\\\/]+)\)(.exe|.pl)?$/i) {
-+if ($^X =~ /\(([^\\\/]+)\)(.exe|.pl)?$/i) {
-     my $argstr = $1;
-     # divide into separate quoted or whitespace-delineated arguments
-     my (@args, $arg, $quote);
-EOF
+# Apply Oliver's patch. Built with `git diff -up`
 patch bin/exiftool_files/lib/Image/ExifTool.pm << 'EOF'
 @@ -8519,7 +8519,7 @@ until ($Image::ExifTool::noConfig) {
          $file = $config;
