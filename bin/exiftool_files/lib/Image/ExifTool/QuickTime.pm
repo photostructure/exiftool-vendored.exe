@@ -46,7 +46,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '2.45';
+$VERSION = '2.47';
 
 sub ProcessMOV($$;$);
 sub ProcessKeys($$$);
@@ -5896,6 +5896,14 @@ my %eeBox = (
     GUID => 'GUID',
     AACR => { Name => 'Unknown_AACR', Unknown => 1 }, # eg: "CR!1T1H1QH6WX7T714G2BMFX3E9MC4S"
     # ausr - 30 bytes (User Alias?)
+    "\xa9xyz" => { #PH (written by Google Photos)
+        Name => 'GPSCoordinates',
+        Groups => { 2 => 'Location' },
+        ValueConv => \&ConvertISO6709,
+        ValueConvInv => \&ConvInvISO6709,
+        PrintConv => \&PrintGPSCoordinates,
+        PrintConvInv => \&PrintInvGPSCoordinates,
+    },
 );
 
 # tag decoded from timed face records
@@ -8221,13 +8229,22 @@ sub HandleItemInfo($)
             my ($start, $subTable, $proc);
             my $pos = $$item{Extents}[0][1] + $base;
             if ($name eq 'EXIF' and length $buff >= 4) {
-                my $n = unpack('N', $buff);
-                $start = 4 + $n; # skip "Exif\0\0" header if it exists
-                $subTable = GetTagTable('Image::ExifTool::Exif::Main');
-                if ($$et{HTML_DUMP}) {
-                    $et->HDump($pos, 4, 'Exif header length', "Value: $n");
-                    $et->HDump($pos+4, $start-4, 'Exif header') if $n;
+                if ($buff =~ /^(MM\0\x2a|II\x2a\0)/) {
+                    $et->Warn('Missing Exif header');
+                    $start = 0;
+                } else {
+                    my $n = unpack('N', $buff);
+                    $start = 4 + $n; # skip "Exif\0\0" header if it exists
+                    if ($start > length($buff)) {
+                        $et->Warn('Invalid EXIF header');
+                        next;
+                    }
+                    if ($$et{HTML_DUMP}) {
+                        $et->HDump($pos, 4, 'Exif header length', "Value: $n");
+                        $et->HDump($pos+4, $start-4, 'Exif header') if $n;
+                    }
                 }
+                $subTable = GetTagTable('Image::ExifTool::Exif::Main');
                 $proc = \&Image::ExifTool::ProcessTIFF;
             } else {
                 $start = 0;
@@ -8953,7 +8970,9 @@ ItemID:         foreach $id (keys %$items) {
                         SetByteOrder('II');
                     }
                     my $oldGroup1 = $$et{SET_GROUP1};
-                    if ($$tagInfo{Name} eq 'Track') {
+                    if ($$tagInfo{SubDirectory} and $$tagInfo{SubDirectory}{TagTable} and
+                        $$tagInfo{SubDirectory}{TagTable} eq 'Image::ExifTool::QuickTime::Track')
+                    {
                         $track or $track = 0;
                         $$et{SET_GROUP1} = 'Track' . (++$track);
                     }

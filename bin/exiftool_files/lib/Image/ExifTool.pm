@@ -28,7 +28,7 @@ use vars qw($VERSION $RELEASE @ISA @EXPORT_OK %EXPORT_TAGS $AUTOLOAD @fileTypes
             %mimeType $swapBytes $swapWords $currentByteOrder %unpackStd
             %jpegMarker %specialTags %fileTypeLookup $testLen $exePath);
 
-$VERSION = '11.93';
+$VERSION = '11.95';
 $RELEASE = '';
 @ISA = qw(Exporter);
 %EXPORT_TAGS = (
@@ -91,7 +91,7 @@ sub GetExtended($$);
 sub Set64u(@);
 sub DecodeBits($$;$);
 sub EncodeBits($$;$$);
-sub Filter($@);
+sub Filter($$@);
 sub HexDump($;$%);
 sub DumpTrailer($$);
 sub DumpUnknownTrailer($$);
@@ -1218,7 +1218,8 @@ my %systemTagsNotes = (
             creation date/time is preserved by default when writing if Win32API::File
             and Win32::API are available.  On Mac, this tag is extracted only if it or
             the MacOS group is specifically requested or the L<RequestAll|../ExifTool.html#RequestAll> API option is
-            set to 2 or higher.  Requires "setfile" for writing on Mac
+            set to 2 or higher.  Requires "setfile" for writing on Mac, which may be
+            installed by typing C<xcode-select --install> in the Terminal
         },
         Groups => { 1 => 'System', 2 => 'Time' },
         Writable => 1,
@@ -2695,10 +2696,15 @@ sub ExtractInfo($;@)
 
     # add user-defined parameters that ended with '!'
     if (%{$$options{UserParam}}) {
-        $self->VPrint(0, "UserParam tags:\n");
+        my $doMsg = $$options{Verbose};
         my $table = GetTagTable('Image::ExifTool::UserParam');
         foreach (sort keys %{$$options{UserParam}}) {
-            $self->HandleTag($table, $_, $$options{UserParam}{$_}) if /#$/;
+            next unless /#$/;
+            if ($doMsg) {
+                $self->VPrint(0, "UserParam tags:\n");
+                undef $doMsg;
+            }
+            $self->HandleTag($table, $_, $$options{UserParam}{$_});
         }
     }
 
@@ -3192,7 +3198,7 @@ sub GetValue($$;$)
             # $valueConv is undefined if there was no print conversion done
             $valueConv = $value;
         }
-        Filter($$self{OPTIONS}{Filter}, \$value);
+        $self->Filter($$self{OPTIONS}{Filter}, \$value);
         # return Both values as a list (ValueConv, PrintConv)
         return ($valueConv, $value);
     }
@@ -3200,7 +3206,7 @@ sub GetValue($$;$)
     DoEscape($value, $$self{ESCAPE_PROC}) if $$self{ESCAPE_PROC};
 
     # filter if necessary
-    Filter($$self{OPTIONS}{Filter}, \$value) if $$self{OPTIONS}{Filter} and $type eq 'PrintConv';
+    $self->Filter($$self{OPTIONS}{Filter}, \$value) if $$self{OPTIONS}{Filter} and $type eq 'PrintConv';
 
     if (ref $value eq 'ARRAY') {
         if (defined $$self{OPTIONS}{ListItem}) {
@@ -5409,11 +5415,12 @@ sub GetDescriptions($$)
 
 #------------------------------------------------------------------------------
 # Apply filter to value(s) if necessary
-# Inputs: 0) filter expression, 1-N) references to values(s) to filter
+# Inputs: 0) ExifTool ref, 1) filter expression, 2-N) references to value(s) to filter
 # Returns: nothing, but changes values if necessary
-sub Filter($@)
+sub Filter($$@)
 {
     local $_;
+    my $self = shift;
     my $filter = shift;
     return unless defined $filter;
     while (@_) {
@@ -5421,20 +5428,20 @@ sub Filter($@)
         next unless defined $$valPt;
         if (not ref $$valPt) {
             $_ = $$valPt;
-            #### eval Filter ($_)
+            #### eval Filter ($_, $self)
             eval $filter;
             $$valPt = $_ if defined $_;
         } elsif (ref $$valPt eq 'SCALAR') {
             my $val = $$$valPt; # make a copy to avoid filtering twice
-            Filter($filter, \$val);
+            $self->Filter($filter, \$val);
             $$valPt = \$val;
         } elsif (ref $$valPt eq 'ARRAY') {
             my @val = @{$$valPt}; # make a copy to avoid filtering twice
-            Filter($filter, \$_) foreach @val;
+            $self->Filter($filter, \$_) foreach @val;
             $$valPt = \@val;
         } elsif (ref $$valPt eq 'HASH') {
             my %val = %{$$valPt}; # make a copy to avoid filtering twice
-            Filter($filter, \$val{$_}) foreach keys %val;
+            $self->Filter($filter, \$val{$_}) foreach keys %val;
             $$valPt = \%val;
         }
     }
@@ -5638,7 +5645,7 @@ sub ConvertUnixTime($;$$)
 
 #------------------------------------------------------------------------------
 # Get Unix time from EXIF-formatted date/time string with optional timezone
-# Inputs: 0) EXIF date/time string, 1) non-zero if time is local
+# Inputs: 0) EXIF date/time string, 1) non-zero if time is local, or 2 to assume UTC
 # Returns: Unix time (seconds since 0:00 GMT Jan 1, 1970) or undefined on error
 sub GetUnixTime($;$)
 {
@@ -5649,10 +5656,14 @@ sub GetUnixTime($;$)
     my ($tzStr, $tzSec) = (pop(@tm), 0);
     # use specified timezone offset (if given) instead of local system time
     # if we are converting a local time value
-    if ($isLocal and $tzStr =~ /(?:Z|([-+])(\d+):(\d+))/i) {
-        # use specified timezone if one exists
-        $tzSec = ($2 * 60 + $3) * ($1 eq '-' ? -60 : 60) if $1;
-        undef $isLocal; # convert using GMT corrected for specified timezone
+    if ($isLocal) {
+        if ($tzStr =~ /(?:Z|([-+])(\d+):(\d+))/i) {
+            # use specified timezone if one exists
+            $tzSec = ($2 * 60 + $3) * ($1 eq '-' ? -60 : 60) if $1;
+            undef $isLocal; # convert using GMT corrected for specified timezone
+        } elsif ($isLocal eq '2') {
+            undef $isLocal;
+        }
     }
     $tm[1] -= 1;        # convert month
     @tm = reverse @tm;  # change to order required by timelocal()
