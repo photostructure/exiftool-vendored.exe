@@ -10,7 +10,7 @@
 use strict;
 require 5.004;
 
-my $version = '11.95';
+my $version = '11.98';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exeDir;
@@ -85,6 +85,7 @@ my @csvFiles;       # list of files when reading with CSV option (in ExifTool Ch
 my @csvTags;        # order of tags for first file with CSV option (lower case)
 my @delFiles;       # list of files to delete
 my @dynamicFiles;   # list of -tagsFromFile files with dynamic names and -TAG<=FMT pairs
+my @efile;          # files for writing list of error/fail/same file names
 my @exclude;        # list of excluded tags
 my (@echo3, @echo4);# stdout and stderr echo after processing is complete
 my @files;          # list of files and directories to scan
@@ -235,6 +236,8 @@ my %optArgs = (
     '-d' => 1, '-dateformat' => 1,
     '-D' => 0, # necessary to avoid matching lower-case equivalent
     '-echo' => 1, '-echo1' => 1, '-echo2' => 1, '-echo3' => 1, '-echo4' => 1,
+    '-efile' => 1, '-efile1' => 1, '-efile2' => 1, '-efile3' => 1, '-efile4' => 1,
+    '-efile!' => 1, '-efile1!' => 1, '-efile2!' => 1, '-efile3!' => 1, '-efile4!' => 1,
     '-ext' => 1, '--ext' => 1, '-ext+' => 1, '--ext+' => 1,
         '-extension' => 1, '--extension' => 1, '-extension+' => 1, '--extension+' => 1,
     '-fileorder' => 1,
@@ -285,8 +288,8 @@ my %altRecommends = (
 my %unescapeChar = ( 't'=>"\t", 'n'=>"\n", 'r'=>"\r" );
 
 # special subroutines used in -if condition
-sub Image::ExifTool::ExitDir() { return $$mt{ExitDir} = 1 }
-sub Image::ExifTool::Exit()    { return $$mt{Exit} = 1 }
+sub Image::ExifTool::EndDir() { return $$mt{EndDir} = 1 }
+sub Image::ExifTool::End()    { return $$mt{End} = 1 }
 
 # exit routine
 sub Exit {
@@ -422,6 +425,7 @@ undef @delFiles;
 undef @dynamicFiles;
 undef @echo3;
 undef @echo4;
+undef @efile;
 undef @exclude;
 undef @files;
 undef @newValues;
@@ -882,6 +886,15 @@ for (;;) {
     if (/^(ee|extractembedded)$/i) {
         $mt->Options(ExtractEmbedded => 1);
         $mt->Options(Duplicates => 1);
+        next;
+    }
+    if (/^efile(\d)?(!)?$/i) {
+        my $arg = shift;
+        defined $arg or Error("Expecting file name for -$_ option\n"), $badCmd=1, next;
+        $efile[0] = $arg if not $1 or $1 & 0x01;
+        $efile[1] = $arg if $1 and $1 & 0x02;
+        $efile[2] = $arg if $1 and $1 & 0x04;
+        unlink $arg if $2;
         next;
     }
     # (-execute handled at top of loop)
@@ -1911,6 +1924,7 @@ sub GetImageInfo($$)
     if (@condition) {
         unless ($file eq '-' or $et->Exists($file)) {
             Warn "Error: File not found - $file\n";
+            EFile($file);
             FileNotFound($file);
             ++$countBad;
             return;
@@ -1956,6 +1970,7 @@ sub GetImageInfo($$)
         }
         unless ($result) {
             $verbose and print $vout "-------- $file (failed condition)$progStr\n";
+            EFile($file, 2);
             ++$countFailed;
             return;
         }
@@ -1976,6 +1991,7 @@ sub GetImageInfo($$)
             ++$countGoodWr;
         } else {
             Warn "Error renaming $original\n";
+            EFile($file);
             ++$countBad;
         }
         return;
@@ -1986,7 +2002,7 @@ sub GetImageInfo($$)
     my ($fp, $outfile, $append);
     if ($textOut and $verbose and not $tagOut) {
         ($fp, $outfile, $append) = OpenOutputFile($orig);
-        $fp or ++$countBad, return;
+        $fp or EFile($file), ++$countBad, return;
         # delete file if we exit prematurely (unless appending)
         $tmpText = $outfile unless $append;
         $et->Options(TextOut => $fp);
@@ -2018,6 +2034,7 @@ sub GetImageInfo($$)
         Warn "Error: File not found - $file\n";
         FileNotFound($file);
         $outfile and close($fp), undef($tmpText), $et->Unlink($outfile);
+        EFile($file);
         ++$countBad;
         return;
     }
@@ -2067,6 +2084,7 @@ sub GetImageInfo($$)
         }
         if ($info->{Error}) {
             Warn "Error: $info->{Error} - $file\n";
+            EFile($file);
             ++$countBad;
             return;
         }
@@ -2077,7 +2095,7 @@ sub GetImageInfo($$)
     # or if there is none of the requested information available
     if ($binaryOutput or not %$info) {
         my $errs = $et->GetInfo('Warning', 'Error');
-        PrintErrors($et, $errs, $file) and $rtnVal = 1;
+        PrintErrors($et, $errs, $file) and EFile($file), $rtnVal = 1;
     } elsif ($et->GetValue('Error') or ($$et{Validate} and $et->GetValue('Warning'))) {
         $rtnVal = 1;
     }
@@ -2085,7 +2103,7 @@ sub GetImageInfo($$)
     # open output file (or stdout if no output file) if not done already
     unless ($outfile or $tagOut) {
         ($fp, $outfile, $append) = OpenOutputFile($orig);
-        $fp or ++$countBad, return;
+        $fp or EFile($file), ++$countBad, return;
         $tmpText = $outfile unless $append;
     }
 
@@ -2144,7 +2162,7 @@ sub GetImageInfo($$)
         }
         delete $printFmt{HEAD} unless $outfile; # print header only once per output file
         my $errs = $et->GetInfo('Warning', 'Error');
-        PrintErrors($et, $errs, $file);
+        PrintErrors($et, $errs, $file) and EFile($file);
     } elsif (not $disableOutput) {
         my ($tag, $line, %noDups, %csvInfo, $bra, $ket, $sep);
         if ($fp) {
@@ -2636,6 +2654,7 @@ sub SetImageInfo($$$)
             $outfile = FilenameSPrintf($outOpt, $orig);
             if ($outfile eq '') {
                 Warn "Error: Can't create file with zero-length name from $orig\n";
+                EFile($infile);
                 ++$countBadCr;
                 return 0;
             }
@@ -2652,6 +2671,7 @@ sub SetImageInfo($$$)
                 unless (CanCreate($outType)) {
                     my $what = $srcType ? 'other types' : 'scratch';
                     WarnOnce "Error: Can't create $outType files from $what\n";
+                    EFile($infile);
                     ++$countBadCr;
                     return 0;
                 }
@@ -2689,6 +2709,7 @@ sub SetImageInfo($$$)
             $outfile = NextUnusedFilename($outfile);
             if ($et->Exists($outfile) and not $doSetFileName) {
                 Warn "Error: '${outfile}' already exists - $infile\n";
+                EFile($infile);
                 ++$countBadWr;
                 return 0;
             }
@@ -2709,7 +2730,7 @@ sub SetImageInfo($$$)
                     $setTags = $tagsFromSrc || $setTags{$dyFile};
                 } else {
                     $fromFile = FilenameSPrintf($dyFile, $orig);
-                    ++$countBadWr, return 0 unless defined $fromFile;
+                    defined $fromFile or EFile($infile), ++$countBadWr, return 0;
                     $setTags = $setTags{$dyFile};
                 }
                 # do we have multiple -tagsFromFile options with this file?
@@ -2794,7 +2815,7 @@ sub SetImageInfo($$$)
             my $err;
             $err = "You shouldn't write FileName or Directory with TestFile" if defined $newFileName or defined $newDir;
             $err = "The -o option shouldn't be used with TestFile" if defined $outfile;
-            $err and Warn("Error: $err - $infile\n"), ++$countBadWr, return 0;
+            $err and Warn("Error: $err - $infile\n"), EFile($infile), ++$countBadWr, return 0;
             $testName = FilenameSPrintf($testName, $orig);
             $testName = Image::ExifTool::GetNewFileName($file, $testName) if $file ne '';
         }
@@ -2821,6 +2842,7 @@ sub SetImageInfo($$$)
                     $sameFile = $outfile;   # same file, but the name has a different case
                 } else {
                     Warn "Error: '${outfile}' already exists - $infile\n";
+                    EFile($infile);
                     ++$countBadWr;
                     return 0;
                 }
@@ -2840,6 +2862,7 @@ sub SetImageInfo($$$)
                 unless ($numSet) {
                     # no need to write if no tags set
                     print $vout "Nothing changed in $file\n" if defined $verbose;
+                    EFile($infile, 1);
                     ++$countSameWr;
                     return 1;
                 }
@@ -2847,6 +2870,7 @@ sub SetImageInfo($$$)
                 if ($numSet == $numPseudo) {
                     # no need to write if no real tags
                     Warn("Error: Nothing to write - $file\n");
+                    EFile($infile, 1);
                     ++$countBadWr;
                     return 0;
                 }
@@ -2858,6 +2882,7 @@ sub SetImageInfo($$$)
             } else {
                 # file doesn't exist, and we can't create it
                 Warn "Error: File not found - $file\n";
+                EFile($infile);
                 FileNotFound($file);
                 ++$countBadWr;
                 return 0;
@@ -2872,9 +2897,11 @@ sub SetImageInfo($$$)
                 if ($r1 > 0 or $r2 > 0 or $r3 > 0 or $r4 > 0) {
                     ++$countGoodWr;
                 } elsif ($r1 < 0 or $r2 < 0 or $r3 < 0 or $r4 < 0) {
+                    EFile($infile);
                     ++$countBadWr;
                     return 0;
                 } else {
+                    EFile($infile, 1);
                     ++$countSameWr;
                 }
                 if (defined $hardLink or defined $symLink or defined $testName) {
@@ -2888,6 +2915,7 @@ sub SetImageInfo($$$)
                 $outfile = "${file}_exiftool_tmp";
                 if ($et->Exists($outfile)) {
                     Warn("Error: Temporary file already exists: $outfile\n");
+                    EFile($infile);
                     ++$countBadWr;
                     return 0;
                 }
@@ -2984,6 +3012,7 @@ sub SetImageInfo($$$)
                         } else {
                             close(NEW_FILE);
                             Warn "Error opening $file for writing\n";
+                            EFile($infile);
                             $et->Unlink($newFile);
                             ++$countBadWr;
                         }
@@ -3001,11 +3030,13 @@ sub SetImageInfo($$$)
                         # unlink may fail if already renamed or no permission
                         if (not $et->Unlink($file)) {
                             Warn "Error renaming temporary file to $dstFile\n";
+                            EFile($infile);
                             $et->Unlink($newFile);
                             ++$countBadWr;
                         # try renaming again now that the target has been deleted
                         } elsif (not $et->Rename($newFile, $dstFile)) {
                             Warn "Error renaming temporary file to $dstFile\n";
+                            EFile($infile);
                             # (don't delete tmp file now because it is all we have left)
                             ++$countBadWr;
                         } else {
@@ -3027,6 +3058,7 @@ sub SetImageInfo($$$)
             ++$countGoodWr;
         }
     } elsif ($success) {
+        EFile($infile, 1);
         if ($isTemporary) {
             # just erase the temporary file since no changes were made
             $et->Unlink($tmpFile);
@@ -3040,6 +3072,7 @@ sub SetImageInfo($$$)
         }
         print $vout "Nothing changed in $file\n" if defined $verbose;
     } else {
+        EFile($infile);
         $et->Unlink($tmpFile) if defined $tmpFile;
         ++$countBadWr;
     }
@@ -3427,7 +3460,7 @@ sub DoSetFromFile($$$)
         ++$warns while $$info{"Warning ($warns)"};
         $numSet -= $warns;
     }
-    PrintErrors($et, $info, $file) and ++$countBadWr, return 0;
+    PrintErrors($et, $info, $file) and EFile($file), ++$countBadWr, return 0;
     Warn "Warning: No writable tags set from $file\n" unless $numSet;
     return 1;
 }
@@ -3513,11 +3546,11 @@ sub ProcessFiles($;$)
                 push(@$list, $file);
             } else {
                 GetImageInfo($et, $file);
-                $$et{Exit} and Warn("Exit called - $file\n");
+                $$et{End} and Warn("End called - $file\n");
             }
         }
         $et->Options(CharsetFileName => $enc) if $utf8FileName{$file};
-        last if $$et{Exit};
+        last if $$et{End};
     }
 }
 
@@ -3595,7 +3628,7 @@ sub ScanDir($$;$)
             next if $file =~ /^\./ and ($recurse == 1 or $file eq '.' or $file eq '..');
             next if $ignore{$file} or ($ignore{SYMLINKS} and -l $path);
             ScanDir($et, $path, $list);
-            last if $$et{Exit};
+            last if $$et{End};
             next;
         }
         # apply rules from -ext options
@@ -3626,6 +3659,7 @@ sub ScanDir($$;$)
         {
             Warn("Not writing $path\n");
             WarnOnce("Use -overwrite_original_in_place to write files with Unicode surrogate characters\n");
+            EFile($file);
             ++$countBad;
             next;
         }
@@ -3634,13 +3668,13 @@ sub ScanDir($$;$)
             push(@$list, $path);
         } else {
             GetImageInfo($et, $path);
-            if ($$et{Exit}) {
-                Warn("Exit called - $file\n");
+            if ($$et{End}) {
+                Warn("End called - $file\n");
                 last;
             }
-            if ($$et{ExitDir}) {
+            if ($$et{EndDir}) {
                 $dir =~ s(/$)();
-                Warn("ExitDir called - $path\n");
+                Warn("EndDir called - $path\n");
                 last;
             }
         }
@@ -3700,6 +3734,7 @@ sub FindFileWindows($$)
         $evalWarning =~ s/ at .*//s;
         Warn "Error: [Win32::FindFile] $evalWarning - $wildfile\n";
         undef @files;
+        EFile($wildfile);
         ++$countBad;
     }
     return @files;
@@ -4026,8 +4061,8 @@ sub CreateDirectory($)
             }
             $dir .= '/';
         }
+        ++$countNewDir if $created;
     }
-    ++$countNewDir if $created;
     return $created;
 }
 
@@ -4210,6 +4245,29 @@ sub ReadStayOpen($)
             close STAYOPEN;
             $stayOpen = 0;
             last;
+        }
+    }
+}
+
+#------------------------------------------------------------------------------
+# Add new entry to -efile output file
+# Inputs: 0) file name, 1) -efile option number (0=error, 1=same, 2=failed)
+sub EFile($$)
+{
+    my $entry = shift;
+    my $efile = $efile[shift || 0];
+    if (defined $efile and length $entry and $entry ne '-') {
+        my $err;
+        CreateDirectory($efile);
+        if ($mt->Open(\*EFILE_FILE, $efile, '>>')) {
+            print EFILE_FILE $entry, "\n" or Warn("Error writing to $efile\n"), $err = 1;
+            close EFILE_FILE;
+        } else {
+            Warn("Error opening '${efile}' for append\n");
+            $err = 1;
+        }
+        if ($err) {
+            defined $_ and $_ eq $efile and undef $_ foreach @efile;
         }
     }
 }
@@ -4501,6 +4559,7 @@ OPTIONS
       -common_args                     Define common arguments
       -config CFGFILE                  Specify configuration file name
       -echo[NUM] TEXT                  Echo text to stdout or stderr
+      -efile[NUM][!] ERRFILE           Save names of files with errors
       -execute[NUM]                    Execute multiple commands on one line
       -srcfile FMT                     Process a different source file
       -stay_open FLAG                  Keep reading -@ argfile even after EOF
@@ -5252,7 +5311,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 11.95 --
+             -- Generated by ExifTool 11.98 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -5734,10 +5793,10 @@ OPTIONS
          The expression has access to the current ExifTool object through
          $self, and the following special functions are available to allow
          short-circuiting of the file processing. Both functions have a
-         return value of 1.
+         return value of 1. Case is significant for function names.
 
-             Exit()    - stop processing files after this one
-             ExitDir() - stop processing files in this directory
+             End()    - end processing after this file
+             EndDir() - end processing of files in this directory
 
          Notes:
 
@@ -6176,6 +6235,16 @@ OPTIONS
          output as the command line is parsed, before the processing of any
          input files. *NUM* may also be 3 or 4 to output text (to stdout or
          stderr respectively) after processing is complete.
+
+    -efile[*NUM*][!] *ERRFILE*
+         Save the names of files giving errors (*NUM* missing or 1), files
+         that were unchanged (*NUM* is 2), files that fail the -if condition
+         (*NUM* is 4), or any combination thereof (by summing *NUM*, eg.
+         -efile3 is the same has having both -efile and -efile2 options with
+         the same *ERRFILE*). By default, file names are appended to any
+         existing *ERRFILE*, but *ERRFILE* is overwritten if an exclamation
+         point is added to the option (eg. -efile!). Saves the name of the
+         file specified by the -srcfile option if applicable.
 
     -execute[*NUM*]
          Execute command for all arguments up to this point on the command
