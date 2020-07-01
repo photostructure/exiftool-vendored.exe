@@ -88,7 +88,7 @@ sub ProcessCTMD($$$);
 sub ProcessExifInfo($$$);
 sub SwapWords($);
 
-$VERSION = '4.37';
+$VERSION = '4.39';
 
 # Note: Removed 'USM' from 'L' lenses since it is redundant - PH
 # (or is it?  Ref 32 shows 5 non-USM L-type lenses)
@@ -474,8 +474,9 @@ $VERSION = '4.37';
     253.1 => 'Canon EF 70-200mm f/2.8L IS III USM + 2x', #PH (NC)
     # 253.2 => 'Tamron SP 70-200mm f/2.8 Di VC USD G2 (A025) + 2x', #forum9367
     254 => 'Canon EF 100mm f/2.8L Macro IS USM', #42
-    255 => 'Sigma 24-105mm f/4 DG OS HSM | A or Other Sigma Lens', #50
+    255 => 'Sigma 24-105mm f/4 DG OS HSM | A or Other Lens', #50
     255.1 => 'Sigma 180mm f/2.8 EX DG OS HSM APO Macro', #50
+    255.2 => 'Tamron SP 70-200mm f/2.8 Di VC USD', #exiv issue 1202 (A009)
     368 => 'Sigma 14-24mm f/2.8 DG HSM | A or other Sigma Lens', #IB (A018)
     368.1 => 'Sigma 20mm f/1.4 DG HSM | A', #50 (newer firmware)
     368.2 => 'Sigma 50mm f/1.4 DG HSM | A', #50
@@ -923,6 +924,7 @@ $VERSION = '4.37';
     0x80000428 => 'EOS-1D X Mark III', #IB
     0x80000432 => 'EOS Rebel T7 / 2000D / 1500D / Kiss X90', #IB
     0x80000433 => 'EOS RP',
+    0x80000435 => 'EOS Rebel T8i / 850D / X10i', #JR/PH
     0x80000436 => 'EOS SL3 / 250D / Kiss X10', #25
     0x80000437 => 'EOS 90D', #IB
     0x80000520 => 'EOS D2000C', #IB
