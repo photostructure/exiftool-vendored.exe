@@ -37,7 +37,7 @@ use vars qw($VERSION %leicaLensTypes);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '2.10';
+$VERSION = '2.11';
 
 sub ProcessLeicaLEIC($$$);
 sub WhiteBalanceConv($;$$);
@@ -458,7 +458,15 @@ my %shootingMode = (
         Name => 'PanasonicExifVersion',
         Writable => 'undef',
     },
-    # 0x27 - values: 0 (LZ6,FX10K)
+    0x27 => {
+        Name => 'VideoFrameRate',
+        Writable => 'int16u',
+        Notes => 'only valid for older models',
+        PrintConv => {
+            OTHER => sub { shift },
+            0 => 'n/a',
+        },
+    },
     0x28 => {
         Name => 'ColorEffect',
         Writable => 'int16u',
@@ -736,8 +744,20 @@ my %shootingMode = (
         PrintConvInv => '$val =~ /(\d+)/ ? $1 : $val',
     },
     # 0x37 - values: 0,1,2 (LZ6, 0 for movie preview); 257 (FX10K); 0,256 (TZ5, 0 for movie preview)
-    # 0x38 - values: 0,1,2 (LZ6, same as 0x37); 1,2 (FX10K); 0,256 (TZ5, 0 for movie preview)
-    #        - changes with noise reduction for DC-S1
+    #        --> may indicate battery power (forum11388)
+    0x38 => { #forum11388
+        Name => 'BatteryLevel',
+        Writable => 'int16u',
+        PrintConv => {
+            1 => 'Full',
+            2 => 'Medium',
+            3 => 'Low',
+            4 => 'Near Empty',
+            7 => 'Near Full',
+            8 => 'Medium Low',
+            256 => 'n/a',
+        },
+    },
     0x39 => { #7 (L1/L10)
         Name => 'Contrast',
         Format => 'int16s',
@@ -1353,6 +1373,14 @@ my %shootingMode = (
         Name => 'VideoPreburst',
         Writable => 'int16u',
         PrintConv => { 0 => 'No', 1 => '4K or 6K' },
+    },
+    0xca => { #forum11459
+        Name => 'SensorType',
+        Writable => 'int16u',
+        PrintConv => {
+            0 => 'Multi-aspect',
+            1 => 'Standard',
+        },
     },
     # Note: LensTypeMake and LensTypeModel are combined into a Composite LensType tag
     # defined in Olympus.pm which has the same values as Olympus:LensType
