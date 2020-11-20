@@ -1,6 +1,6 @@
 {
   "name": "exiftool-vendored.exe",
-  "version": "12.6.0",
+  "version": "12.10.0-pre",
   "description": "Vendored win32 ExifTool for Node.js",
   "main": "./index.js",
   "homepage": "https://github.com/mceachen/exiftool-vendored.exe#readme",
@@ -31,7 +31,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "mocha": "^8.1.3",
-    "prettier": "^2.1.2"
+    "mocha": "^8.2.1",
+    "prettier": "^2.2.0"
   }
 }
