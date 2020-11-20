@@ -10,7 +10,7 @@
 use strict;
 require 5.004;
 
-my $version = '12.06';
+my $version = '12.10';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exeDir;
@@ -382,13 +382,21 @@ if (grep /^-common_args$/i, @ARGV) {
 # loop over sets of command-line arguments separated by "-execute"
 Command: for (;;) {
 
-@echo3 and print STDOUT join("\n", @echo3), "\n";
-@echo4 and print STDERR join("\n", @echo4), "\n";
+if (@echo3) {
+    my $str = join "\n", @echo3, "\n";
+    $str =~ s/\$\{status\}/$rtnVal/ig;
+    print STDOUT $str;
+}
+if (@echo4) {
+    my $str = join "\n", @echo4, "\n";
+    $str =~ s/\$\{status\}/$rtnVal/ig;
+    print STDERR $str;
+}
 
 $rafStdin->Close() if $rafStdin;
 undef $rafStdin;
 
-# save or previous return codes
+# save our previous return codes
 $rtnValPrev = $rtnVal;
 $rtnValApp = $rtnVal if $rtnVal;
 
@@ -403,7 +411,7 @@ if ($binaryStdout) {
 
 # flush console and print "{ready}" message if -stay_open is in effect
 if ($stayOpen >= 2) {
-    if ($quiet) {
+    if ($quiet and not defined $executeID) {
         # flush output if possible
         eval { require IO::Handle } and STDERR->flush(), STDOUT->flush();
     } else {
@@ -570,7 +578,7 @@ if (not $preserveTime and $^O eq 'MSWin32') {
 for (;;) {
 
   # execute the command now if no more arguments or -execute is used
-  if (not @ARGV or ($ARGV[0] =~ /^(-|\xe2\x88\x92)execute(\d*)$/i and not $endOfOpts)) {
+  if (not @ARGV or ($ARGV[0] =~ /^(-|\xe2\x88\x92)execute(\d+)?$/i and not $endOfOpts)) {
     if (@ARGV) {
         $executeID = $2;        # save -execute number for "{ready}" response
         $helped = 1;            # don't show help if we used -execute
@@ -1758,10 +1766,12 @@ if (@dbKeys) {
         undef $evalWarning;
         local $SIG{'__WARN__'} = sub { $evalWarning = $_[0] };
         foreach (@dbKeys) {
+            my $db = $database{$_};
+            tr/\\/\// and $database{$_} = $db;  # allow for backslashes in SourceFile
             # (punt on using ConvertFileName here, so $absPath may be a mix of encodings)
             my $absPath = AbsPath($_);
             if (defined $absPath) {
-                $database{$absPath} = $database{$_} unless $database{$absPath};
+                $database{$absPath} = $db unless $database{$absPath};
                 if ($verbose and $verbose > 1) {
                     print $vout "Imported entry for '${_}' (full path: '${absPath}')\n";
                 }
@@ -3566,7 +3576,7 @@ sub ScanDir($$;$)
 {
     local $_;
     my ($et, $dir, $list) = @_;
-    my (@fileList, $done, $file, $utf8Name, $winSurrogate);
+    my (@fileList, $done, $file, $utf8Name, $winSurrogate, $endThisDir);
     my $enc = $et->Options('CharsetFileName');
     # recode as UTF-8 if necessary
     if ($enc) {
@@ -3636,6 +3646,7 @@ sub ScanDir($$;$)
             last if $end;
             next;
         }
+        next if $endThisDir;
         # apply rules from -ext options
         my $accepted;
         if ($filterFlag) {
@@ -3678,9 +3689,10 @@ sub ScanDir($$;$)
                 last;
             }
             if ($endDir) {
-                $dir =~ s(/$)();
+                $path =~ s(/$)();
                 Warn("EndDir called - $path\n");
-                last;
+                undef $endDir;
+                $endThisDir = 1;
             }
         }
     }
@@ -4395,46 +4407,47 @@ DESCRIPTION
 
       File Types
       ------------+-------------+-------------+-------------+------------
-      3FR   r     | DPX   r     | ISO   r     | O     r     | RAW   r/w
-      3G2   r/w   | DR4   r/w/c | ITC   r     | ODP   r     | RIFF  r
-      3GP   r/w   | DSS   r     | J2C   r     | ODS   r     | RSRC  r
-      A     r     | DV    r     | JNG   r/w   | ODT   r     | RTF   r
-      AA    r     | DVB   r/w   | JP2   r/w   | OFR   r     | RW2   r/w
-      AAE   r     | DVR-MS r    | JPEG  r/w   | OGG   r     | RWL   r/w
-      AAX   r/w   | DYLIB r     | JSON  r     | OGV   r     | RWZ   r
-      ACR   r     | EIP   r     | K25   r     | OPUS  r     | RM    r
-      AFM   r     | EPS   r/w   | KDC   r     | ORF   r/w   | SEQ   r
-      AI    r/w   | EPUB  r     | KEY   r     | OTF   r     | SKETCH r
-      AIFF  r     | ERF   r/w   | LA    r     | PAC   r     | SO    r
-      APE   r     | EXE   r     | LFP   r     | PAGES r     | SR2   r/w
-      ARQ   r/w   | EXIF  r/w/c | LNK   r     | PBM   r/w   | SRF   r
-      ARW   r/w   | EXR   r     | LRV   r/w   | PCD   r     | SRW   r/w
-      ASF   r     | EXV   r/w/c | M2TS  r     | PCX   r     | SVG   r
-      AVI   r     | F4A/V r/w   | M4A/V r/w   | PDB   r     | SWF   r
-      AVIF  r/w   | FFF   r/w   | MAX   r     | PDF   r/w   | THM   r/w
-      AZW   r     | FITS  r     | MEF   r/w   | PEF   r/w   | TIFF  r/w
-      BMP   r     | FLA   r     | MIE   r/w/c | PFA   r     | TORRENT r
-      BPG   r     | FLAC  r     | MIFF  r     | PFB   r     | TTC   r
-      BTF   r     | FLIF  r/w   | MKA   r     | PFM   r     | TTF   r
-      CHM   r     | FLV   r     | MKS   r     | PGF   r     | TXT   r
-      COS   r     | FPF   r     | MKV   r     | PGM   r/w   | VCF   r
-      CR2   r/w   | FPX   r     | MNG   r/w   | PLIST r     | VRD   r/w/c
-      CR3   r/w   | GIF   r/w   | MOBI  r     | PICT  r     | VSD   r
-      CRM   r/w   | GPR   r/w   | MODD  r     | PMP   r     | WAV   r
-      CRW   r/w   | GZ    r     | MOI   r     | PNG   r/w   | WDP   r/w
-      CS1   r/w   | HDP   r/w   | MOS   r/w   | PPM   r/w   | WEBP  r
-      CSV   r     | HDR   r     | MOV   r/w   | PPT   r     | WEBM  r
-      CZI   r     | HEIC  r/w   | MP3   r     | PPTX  r     | WMA   r
-      DCM   r     | HEIF  r/w   | MP4   r/w   | PS    r/w   | WMV   r
-      DCP   r/w   | HTML  r     | MPC   r     | PSB   r/w   | WTV   r
-      DCR   r     | ICC   r/w/c | MPG   r     | PSD   r/w   | WV    r
-      DFONT r     | ICS   r     | MPO   r/w   | PSP   r     | X3F   r/w
-      DIVX  r     | IDML  r     | MQV   r/w   | QTIF  r/w   | XCF   r
-      DJVU  r     | IIQ   r/w   | MRW   r/w   | R3D   r     | XLS   r
-      DLL   r     | IND   r/w   | MXF   r     | RA    r     | XLSX  r
-      DNG   r/w   | INSP  r/w   | NEF   r/w   | RAF   r/w   | XMP   r/w/c
-      DOC   r     | INSV  r     | NRW   r/w   | RAM   r     | ZIP   r
-      DOCX  r     | INX   r     | NUMBERS r   | RAR   r     |
+      360   r/w   | DPX   r     | ITC   r     | ODP   r     | RIFF  r
+      3FR   r     | DR4   r/w/c | J2C   r     | ODS   r     | RSRC  r
+      3G2   r/w   | DSS   r     | JNG   r/w   | ODT   r     | RTF   r
+      3GP   r/w   | DV    r     | JP2   r/w   | OFR   r     | RW2   r/w
+      A     r     | DVB   r/w   | JPEG  r/w   | OGG   r     | RWL   r/w
+      AA    r     | DVR-MS r    | JSON  r     | OGV   r     | RWZ   r
+      AAE   r     | DYLIB r     | K25   r     | ONP   r     | RM    r
+      AAX   r/w   | EIP   r     | KDC   r     | OPUS  r     | SEQ   r
+      ACR   r     | EPS   r/w   | KEY   r     | ORF   r/w   | SKETCH r
+      AFM   r     | EPUB  r     | LA    r     | OTF   r     | SO    r
+      AI    r/w   | ERF   r/w   | LFP   r     | PAC   r     | SR2   r/w
+      AIFF  r     | EXE   r     | LNK   r     | PAGES r     | SRF   r
+      APE   r     | EXIF  r/w/c | LRV   r/w   | PBM   r/w   | SRW   r/w
+      ARQ   r/w   | EXR   r     | M2TS  r     | PCD   r     | SVG   r
+      ARW   r/w   | EXV   r/w/c | M4A/V r/w   | PCX   r     | SWF   r
+      ASF   r     | F4A/V r/w   | MACOS r     | PDB   r     | THM   r/w
+      AVI   r     | FFF   r/w   | MAX   r     | PDF   r/w   | TIFF  r/w
+      AVIF  r/w   | FITS  r     | MEF   r/w   | PEF   r/w   | TORRENT r
+      AZW   r     | FLA   r     | MIE   r/w/c | PFA   r     | TTC   r
+      BMP   r     | FLAC  r     | MIFF  r     | PFB   r     | TTF   r
+      BPG   r     | FLIF  r/w   | MKA   r     | PFM   r     | TXT   r
+      BTF   r     | FLV   r     | MKS   r     | PGF   r     | VCF   r
+      CHM   r     | FPF   r     | MKV   r     | PGM   r/w   | VRD   r/w/c
+      COS   r     | FPX   r     | MNG   r/w   | PLIST r     | VSD   r
+      CR2   r/w   | GIF   r/w   | MOBI  r     | PICT  r     | WAV   r
+      CR3   r/w   | GPR   r/w   | MODD  r     | PMP   r     | WDP   r/w
+      CRM   r/w   | GZ    r     | MOI   r     | PNG   r/w   | WEBP  r
+      CRW   r/w   | HDP   r/w   | MOS   r/w   | PPM   r/w   | WEBM  r
+      CS1   r/w   | HDR   r     | MOV   r/w   | PPT   r     | WMA   r
+      CSV   r     | HEIC  r/w   | MP3   r     | PPTX  r     | WMV   r
+      CZI   r     | HEIF  r/w   | MP4   r/w   | PS    r/w   | WTV   r
+      DCM   r     | HTML  r     | MPC   r     | PSB   r/w   | WV    r
+      DCP   r/w   | ICC   r/w/c | MPG   r     | PSD   r/w   | X3F   r/w
+      DCR   r     | ICS   r     | MPO   r/w   | PSP   r     | XCF   r
+      DFONT r     | IDML  r     | MQV   r/w   | QTIF  r/w   | XLS   r
+      DIVX  r     | IIQ   r/w   | MRW   r/w   | R3D   r     | XLSX  r
+      DJVU  r     | IND   r/w   | MXF   r     | RA    r     | XMP   r/w/c
+      DLL   r     | INSP  r/w   | NEF   r/w   | RAF   r/w   | ZIP   r
+      DNG   r/w   | INSV  r     | NRW   r/w   | RAM   r     |
+      DOC   r     | INX   r     | NUMBERS r   | RAR   r     |
+      DOCX  r     | ISO   r     | O     r     | RAW   r/w   |
 
       Meta Information
       ----------------------+----------------------+---------------------
@@ -5316,7 +5329,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.06 --
+             -- Generated by ExifTool 12.10 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -5750,7 +5763,8 @@ OPTIONS
          for the -fast level used during the metadata-extraction phase. For
          example, -fileOrder4 may be used if *TAG* is a pseudo System tag.
          If multiple -fileOrder options are used, the extraction is done at
-         the lowest -fast level.
+         the lowest -fast level. Note that files are sorted across directory
+         boundaries if multiple input directories are specified.
 
     -i *DIR* (-ignore)
          Ignore specified directory name. *DIR* may be either an individual
@@ -5801,7 +5815,8 @@ OPTIONS
          return value of 1. Case is significant for function names.
 
              End()    - end processing after this file
-             EndDir() - end processing of files in this directory
+             EndDir() - end processing of files in this directory (not
+                        compatible with the B<-fileOrder> option)
 
          Notes:
 
@@ -6239,7 +6254,9 @@ OPTIONS
          Echo *TEXT* to stdout (-echo or -echo1) or stderr (-echo2). Text is
          output as the command line is parsed, before the processing of any
          input files. *NUM* may also be 3 or 4 to output text (to stdout or
-         stderr respectively) after processing is complete.
+         stderr respectively) after processing is complete. For -echo3 and
+         -echo4, "${status}" may be used in the *TEXT* string to represent
+         the numerical exit status of the command (see "EXIT STATUS").
 
     -efile[*NUM*][!] *ERRFILE*
          Save the names of files giving errors (*NUM* missing or 1), files
@@ -6259,7 +6276,8 @@ OPTIONS
          effect for subsequent commands). Allows multiple commands to be
          executed from a single command line. *NUM* is an optional number
          that is echoed in the "{ready}" message when using the -stay_open
-         feature.
+         feature. If a *NUM* is specified, the -q option no longer
+         suppresses the output "{readyNUM}" message.
 
     -srcfile *FMT*
          Specify a different source file to be processed based on the name
@@ -6310,7 +6328,10 @@ OPTIONS
          continue trying to read arguments for the next command from
          *ARGFILE*. To aid in command/response synchronization, any number
          appended to the "-execute" option is echoed in the "{ready}"
-         message. For example, "-execute613" results in "{ready613}".
+         message. For example, "-execute613" results in "{ready613}". When
+         this number is added, -q no longer suppresses the "{ready}"
+         message. (Also, see the -echo3 and -echo4 options for additional
+         ways to pass signals back to your application.)
 
          4) Repeat steps 2 and 3 for each command.
 
