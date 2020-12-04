@@ -88,7 +88,7 @@ sub ProcessCTMD($$$);
 sub ProcessExifInfo($$$);
 sub SwapWords($);
 
-$VERSION = '4.40';
+$VERSION = '4.42';
 
 # Note: Removed 'USM' from 'L' lenses since it is redundant - PH
 # (or is it?  Ref 32 shows 5 non-USM L-type lenses)
@@ -578,16 +578,17 @@ $VERSION = '4.40';
     61182.7 => 'Canon RF 15-35mm F2.8L IS USM',
     61182.8 => 'Canon RF 24-240mm F4-6.3 IS USM',
     61182.9 => 'Canon RF 70-200mm F2.8L IS USM',
-    61182.10 => 'Canon RF 600mm F11 IS STM',
-    61182.11 => 'Canon RF 600mm F11 IS STM + RF1.4x',
-    61182.12 => 'Canon RF 600mm F11 IS STM + RF2x',
-    61182.13 => 'Canon RF 800mm F11 IS STM',
-    61182.14 => 'Canon RF 800mm F11 IS STM + RF1.4x',
-    61182.15 => 'Canon RF 800mm F11 IS STM + RF2x',
-    61182.16 => 'Canon RF 24-105mm F4-7.1 IS STM',
-    61182.17 => 'Canon RF 100-500mm F4.5-7.1L IS USM',
-    61182.18 => 'Canon RF 100-500mm F4.5-7.1L IS USM + RF1.4x',
-    61182.19 => 'Canon RF 100-500mm F4.5-7.1L IS USM + RF2x',
+    61182.10 => 'Canon RF 85mm F2 MACRO IS STM',
+    61182.11 => 'Canon RF 600mm F11 IS STM',
+    61182.12 => 'Canon RF 600mm F11 IS STM + RF1.4x',
+    61182.13 => 'Canon RF 600mm F11 IS STM + RF2x',
+    61182.14 => 'Canon RF 800mm F11 IS STM',
+    61182.15 => 'Canon RF 800mm F11 IS STM + RF1.4x',
+    61182.16 => 'Canon RF 800mm F11 IS STM + RF2x',
+    61182.17 => 'Canon RF 24-105mm F4-7.1 IS STM',
+    61182.18 => 'Canon RF 100-500mm F4.5-7.1L IS USM',
+    61182.19 => 'Canon RF 100-500mm F4.5-7.1L IS USM + RF1.4x',
+    61182.20 => 'Canon RF 100-500mm F4.5-7.1L IS USM + RF2x',
     65535 => 'n/a',
 );
 
@@ -943,6 +944,7 @@ $VERSION = '4.40';
     0x80000436 => 'EOS SL3 / 250D / Kiss X10', #25
     0x80000437 => 'EOS 90D', #IB
     0x80000453 => 'EOS R6', #PH
+    0x80000467 => 'PowerShot ZOOM',
     0x80000520 => 'EOS D2000C', #IB
     0x80000560 => 'EOS D6000C', #PH (guess)
 );
@@ -6722,6 +6724,7 @@ my %ciMaxFocal = (
             264 => 'Canon RF 15-35mm F2.8L IS USM',
             265 => 'Canon RF 24-240mm F4-6.3 IS USM',
             266 => 'Canon RF 70-200mm F2.8L IS USM',
+            267 => 'Canon RF 85mm F2 MACRO IS STM',
             268 => 'Canon RF 600mm F11 IS STM',
             269 => 'Canon RF 600mm F11 IS STM + RF1.4x',
             270 => 'Canon RF 600mm F11 IS STM + RF2x',
