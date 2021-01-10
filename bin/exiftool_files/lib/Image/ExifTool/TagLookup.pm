@@ -3976,6 +3976,10 @@ my %tagLookup = (
 	'meteringtime' => { 267 => '22.2', 269 => '3.2', 272 => '17.1', 273 => '18.1', 276 => '7.3', 277 => '18.1', 278 => '3.2', 282 => '19.1' },
 	'micro1version' => { 369 => 0x1f },
 	'micro2version' => { 369 => 0x2d },
+	'microvideo' => { 447 => 'MicroVideo' },
+	'microvideooffset' => { 447 => 'MicroVideoOffset' },
+	'microvideopresentationtimestampus' => { 447 => 'MicroVideoPresentationTimestampUs' },
+	'microvideoversion' => { 447 => 'MicroVideoVersion' },
 	'midrangesharpness' => { 224 => 0x3b },
 	'mieversion' => { 161 => '0Vers' },
 	'mime' => { 449 => 'Mime' },
@@ -10830,6 +10834,7 @@ my %tagExists = (
 	'userplaycountweekend' => 1,
 	'userselectgrouptitle' => 1,
 	'userservicerating' => 1,
+	'usertext' => 1,
 	'userweburl' => 1,
 	'usingtransforms' => 1,
 	'usmparametershigh' => 1,
@@ -11444,7 +11449,7 @@ Provides a fast, case insensitive lookup for tag names.
 
 =head1 AUTHOR
 
-Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2021, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
