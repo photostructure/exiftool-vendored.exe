@@ -10,7 +10,7 @@
 use strict;
 require 5.004;
 
-my $version = '12.14';
+my $version = '12.18';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exeDir;
@@ -387,12 +387,12 @@ if (grep /^-common_args$/i, @ARGV) {
 Command: for (;;) {
 
 if (@echo3) {
-    my $str = join "\n", @echo3, "\n";
+    my $str = join("\n", @echo3) . "\n";
     $str =~ s/\$\{status\}/$rtnVal/ig;
     print STDOUT $str;
 }
 if (@echo4) {
-    my $str = join "\n", @echo4, "\n";
+    my $str = join("\n", @echo4) . "\n";
     $str =~ s/\$\{status\}/$rtnVal/ig;
     print STDERR $str;
 }
@@ -910,8 +910,8 @@ for (;;) {
         $helped = 1;
         next;
     }
-    if (/^(ee|extractembedded)$/i) {
-        $mt->Options(ExtractEmbedded => 1);
+    if (/^(ee|extractembedded)(\d*)$/i) {
+        $mt->Options(ExtractEmbedded => $2 || 1);
         $mt->Options(Duplicates => 1);
         next;
     }
@@ -1280,7 +1280,7 @@ for (;;) {
     if (/^php$/i) {
         $json = 2;
         $html = $xml = 0;
-        $mt->Options(Duplicates=>1);
+        $mt->Options(Duplicates => 1);
         next;
     }
     if (/^z(ip)?$/i) {
@@ -1505,7 +1505,6 @@ if ($xml) {
         require Image::ExifTool::XMP if $json == 1;  # (for EncodeBase64)
     }
     $mt->Options(List => 1) unless $joinLists;
-    $mt->Options(Duplicates => 0) unless defined $showGroup;
     $showTagID = 'D' if $tabFormat and not $showTagID;
 } elsif ($structOpt) {
     $mt->Options(List => 1);
@@ -2304,7 +2303,7 @@ TAG:    foreach $tag (@foundTags) {
                 $group = $et->GetGroup($tag, $showGroup);
                 # look ahead to see if this tag may suppress a priority tag in
                 # the same group, and if so suppress this tag instead
-                next if $noDups and $tag =~ /^(.*?) ?\(/ and defined $$info{$1} and
+                next if $noDups and $tag =~ /^(.*?) \(/ and defined $$info{$1} and
                         $group eq $et->GetGroup($1, $showGroup);
                 $group = 'Unknown' if not $group and ($xml or $json or $csv);
                 if ($fp and not ($allGroup or $csv)) {
@@ -2327,6 +2326,9 @@ TAG:    foreach $tag (@foundTags) {
                     }
                     undef $group;   # undefine so we don't print it below
                 }
+            } elsif ($noDups) {
+                # don't allow duplicates, but avoid suppressing the priority tag
+                next if $tag =~ /^(.*?) \(/ and defined $$info{$1};
             }
 
             ++$lineCount;           # we are printing something meaningful
@@ -4583,7 +4585,7 @@ OPTIONS
 
       -a          (-duplicates)        Allow duplicate tags to be extracted
       -e          (--composite)        Do not generate composite tags
-      -ee         (-extractEmbedded)   Extract information from embedded files
+      -ee[NUM]    (-extractEmbedded)   Extract information from embedded files
       -ext[+] EXT (-extension)         Process files with specified extension
       -F[OFFSET]  (-fixBase)           Fix the base for maker notes offsets
       -fast[NUM]                       Increase speed when extracting metadata
@@ -5226,19 +5228,19 @@ OPTIONS
          JSON output, but the original structure may be preserved with the
          -struct option (this also causes all list-type XMP tags to be
          output as JSON arrays, otherwise single-item lists would be output
-         as simple strings). The -a option is implied if the -g or -G
-         options are used, otherwise it is ignored and tags with identical
-         JSON names are suppressed. (-g4 may be used to ensure that all tags
-         have unique JSON names.) Adding the -D or -H option changes tag
-         values to JSON objects with "val" and "id" fields, and adding -l
-         adds a "desc" field, and a "num" field if the numerical value is
-         different from the converted "val". The -b option may be added to
-         output binary data, encoded in base64 if necessary (indicated by
-         ASCII "base64:" as the first 7 bytes of the value), and -t may be
-         added to include tag table information (see -t for details). The
-         JSON output is UTF-8 regardless of any -L or -charset option
-         setting, but the UTF-8 validation is disabled if a character set
-         other than UTF-8 is specified.
+         as simple strings). The -a option is implied when -json is used,
+         but entries with identical JSON names are suppressed in the output.
+         (-G4 may be used to ensure that all tags have unique JSON names.)
+         Adding the -D or -H option changes tag values to JSON objects with
+         "val" and "id" fields, and adding -l adds a "desc" field, and a
+         "num" field if the numerical value is different from the converted
+         "val". The -b option may be added to output binary data, encoded in
+         base64 if necessary (indicated by ASCII "base64:" as the first 7
+         bytes of the value), and -t may be added to include tag table
+         information (see -t for details). The JSON output is UTF-8
+         regardless of any -L or -charset option setting, but the UTF-8
+         validation is disabled if a character set other than UTF-8 is
+         specified.
 
          If *JSONFILE* is specified, the file is imported and the tag
          definitions from the file are used to set tag values on a per-file
@@ -5391,7 +5393,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.14 --
+             -- Generated by ExifTool 12.18 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -5548,18 +5550,18 @@ OPTIONS
          so an argument like "%d%f.txt" is written as "%%d%%f.txt".
 
          2) If the argument for -w does not contain a valid format code (eg.
-         %f), then it is interpreted as a file extension. It is not possible
-         to specify a simple filename as an argument -- creating a single
-         output file from multiple source files is typically done by shell
-         redirection, ie)
+         %f), then it is interpreted as a file extension, but there are
+         three different ways to create a single output file from multiple
+         source files:
 
+             # 1. Shell redirection
              exiftool FILE1 FILE2 ... > out.txt
 
-         But if necessary, an empty format code may be used to force the
-         argument to be interpreted as a format string, and the same result
-         may be obtained without the use of shell redirection:
-
+             # 2. With the -w option and a zero-width format code
              exiftool -w+! %0fout.txt FILE1 FILE2 ...
+
+             # 3. With the -W option (see the -W option below)
+             exiftool -W+! out.txt FILE1 FILE2 ...
 
          Advanced features:
 
@@ -5729,7 +5731,7 @@ OPTIONS
     -e (--composite)
          Extract existing tags only -- don't generate composite tags.
 
-    -ee (-extractEmbedded)
+    -ee[*NUM*] (-extractEmbedded)
          Extract information from embedded documents in EPS files, embedded
          EPS information and JPEG and Jpeg2000 images in PDF files, embedded
          MPF images in JPEG and MPO files, streaming metadata in AVCHD
@@ -5747,6 +5749,11 @@ OPTIONS
          example, generation of GPS track logs from timed metadata in
          videos. See <https://exiftool.org/geotag.html#Inverse> for
          examples.
+
+         Setting *NUM* to 2 causes the H264 video stream in MP4 videos to be
+         parsed until the first Supplemental Enhancement Information (SEI)
+         message is decoded, or 3 to parse the entire H624 stream and decode
+         all SEI information.
 
     -ext[+] *EXT*, --ext *EXT* (-extension)
          Process only files with (-ext) or without (--ext) a specified
