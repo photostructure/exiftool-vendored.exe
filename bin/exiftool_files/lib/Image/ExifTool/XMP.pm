@@ -50,7 +50,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 require Exporter;
 
-$VERSION = '3.38';
+$VERSION = '3.40';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(EscapeXML UnescapeXML);
 
@@ -201,13 +201,13 @@ my %uri2ns = ( 'http://ns.exiftool.org/1.0/' => 'et' ); # (allow exiftool.org as
     ValueConv    => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
     ValueConvInv => 'Image::ExifTool::GPS::ToDMS($self, $val, 2, "N")',
     PrintConv    => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "N")',
-    PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
+    PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1, "lat")',
 );
 %longConv = (
     ValueConv    => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
     ValueConvInv => 'Image::ExifTool::GPS::ToDMS($self, $val, 2, "E")',
     PrintConv    => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "E")',
-    PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
+    PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1, "lon")',
 );
 %dateTimeInfo = (
     # NOTE: Do NOT put "Groups" here because Groups hash must not be common!
@@ -2280,7 +2280,7 @@ my %sPantryItem = (
         Priority => 0,
         # prevent this from getting set from a LensID that has been converted
         ValueConvInv => q{
-            warn "Expected one or more integer values" if $val =~ /[^\d ]/;
+            warn "Expected one or more integer values" if $val =~ /[^-\d ]/;
             return $val;
         },
     },
@@ -4063,12 +4063,14 @@ sub ProcessXMP($$;$)
 
     # extract XMP/XML as a block if specified
     my $blockName = $$dirInfo{BlockInfo} ? $$dirInfo{BlockInfo}{Name} : 'XMP';
+    my $blockExtract = $et->Options('BlockExtract');
     if (($$et{REQ_TAG_LOOKUP}{lc $blockName} or ($$et{TAGS_FROM_FILE} and
-        not $$et{EXCL_TAG_LOOKUP}{lc $blockName})) and
+        not $$et{EXCL_TAG_LOOKUP}{lc $blockName}) or $blockExtract) and
         (($$et{FileType} eq 'XMP' and $blockName eq 'XMP') or
         ($$dirInfo{DirName} and $$dirInfo{DirName} eq $blockName)))
     {
         $et->FoundTag($$dirInfo{BlockInfo} || 'XMP', substr($$dataPt, $dirStart, $dirLen));
+        return 1 if $blockExtract and $blockExtract > 1;
     }
 
     $tagTablePtr or $tagTablePtr = GetTagTable('Image::ExifTool::XMP::Main');
