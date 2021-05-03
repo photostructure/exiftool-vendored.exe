@@ -28,7 +28,7 @@ use vars qw($VERSION $RELEASE @ISA @EXPORT_OK %EXPORT_TAGS $AUTOLOAD @fileTypes
             %mimeType $swapBytes $swapWords $currentByteOrder %unpackStd
             %jpegMarker %specialTags %fileTypeLookup $testLen $exePath);
 
-$VERSION = '12.23';
+$VERSION = '12.25';
 $RELEASE = '';
 @ISA = qw(Exporter);
 %EXPORT_TAGS = (
@@ -138,18 +138,18 @@ sub ReadValue($$$;$$$);
 @loadAllTables = qw(
     PhotoMechanic Exif GeoTiff CanonRaw KyoceraRaw Lytro MinoltaRaw PanasonicRaw
     SigmaRaw JPEG GIMP Jpeg2000 GIF BMP BMP::OS2 BMP::Extra BPG BPG::Extensions
-    PICT PNG MNG FLIF DjVu DPX OpenEXR ZISRAW MIFF PCX PGF PSP PhotoCD Radiance
-    PDF PostScript Photoshop::Header Photoshop::Layers Photoshop::ImageData
-    FujiFilm::RAF FujiFilm::IFD Samsung::Trailer Sony::SRF2 Sony::SR2SubIFD
-    Sony::PMP ITC ID3 ID3::Lyrics3 FLAC Ogg Vorbis APE APE::NewHeader
-    APE::OldHeader Audible MPC MPEG::Audio MPEG::Video MPEG::Xing M2TS QuickTime
-    QuickTime::ImageFile QuickTime::Stream QuickTime::Tags360Fly Matroska MOI
-    MXF DV Flash Flash::FLV Real::Media Real::Audio Real::Metafile Red RIFF AIFF
-    ASF WTV DICOM FITS MIE JSON HTML XMP::SVG Palm Palm::MOBI Palm::EXTH Torrent
-    EXE EXE::PEVersion EXE::PEString EXE::MachO EXE::PEF EXE::ELF EXE::AR
-    EXE::CHM LNK Font VCard Text VCard::VCalendar RSRC Rawzor ZIP ZIP::GZIP
-    ZIP::RAR RTF OOXML iWork ISO FLIR::AFF FLIR::FPF MacOS MacOS::MDItem
-    FlashPix::DocTable
+    PICT PNG MNG FLIF DjVu DPX OpenEXR ZISRAW MRC MRC::FEI12 MIFF PCX PGF PSP
+    PhotoCD Radiance PDF PostScript Photoshop::Header Photoshop::Layers
+    Photoshop::ImageData FujiFilm::RAF FujiFilm::IFD Samsung::Trailer Sony::SRF2
+    Sony::SR2SubIFD Sony::PMP ITC ID3 ID3::Lyrics3 FLAC Ogg Vorbis APE
+    APE::NewHeader APE::OldHeader Audible MPC MPEG::Audio MPEG::Video MPEG::Xing
+    M2TS QuickTime QuickTime::ImageFile QuickTime::Stream QuickTime::Tags360Fly
+    Matroska MOI MXF DV Flash Flash::FLV Real::Media Real::Audio Real::Metafile
+    Red RIFF AIFF ASF WTV DICOM FITS MIE JSON HTML XMP::SVG Palm Palm::MOBI
+    Palm::EXTH Torrent EXE EXE::PEVersion EXE::PEString EXE::MachO EXE::PEF
+    EXE::ELF EXE::AR EXE::CHM LNK Font VCard Text VCard::VCalendar RSRC Rawzor
+    ZIP ZIP::GZIP ZIP::RAR RTF OOXML iWork ISO FLIR::AFF FLIR::FPF MacOS
+    MacOS::MDItem FlashPix::DocTable
 );
 
 # alphabetical list of current Lang modules
@@ -189,19 +189,19 @@ $defaultLang = 'en';    # default language
                 FLAC APE MPC MKV MXF DV PMP IND PGF ICC ITC FLIR FLIF FPF LFP
                 HTML VRD RTF FITS XCF DSS QTIF FPX PICT ZIP GZIP PLIST RAR BZ2
                 CZI TAR  EXE EXR HDR CHM LNK WMF AVC DEX DPX RAW Font RSRC M2TS
-                MacOS PHP PCX DCX DWF DWG WTV Torrent VCard LRI R3D AA PDB MOI
-                ISO ALIAS JSON MP3 DICOM PCD TXT);
+                MacOS PHP PCX DCX DWF DWG DXF WTV Torrent VCard LRI R3D AA PDB
+                MRC JXL MOI ISO ALIAS JSON MP3 DICOM PCD TXT);
 
 # file types that we can write (edit)
 my @writeTypes = qw(JPEG TIFF GIF CRW MRW ORF RAF RAW PNG MIE PSD XMP PPM EPS
-                    X3F PS PDF ICC VRD DR4 JP2 EXIF AI AIT IND MOV EXV FLIF);
+                    X3F PS PDF ICC VRD DR4 JP2 JXL EXIF AI AIT IND MOV EXV FLIF);
 my %writeTypes; # lookup for writable file types (hash filled if required)
 
 # file extensions that we can't write for various base types
 %noWriteFile = (
     TIFF => [ qw(3FR DCR K25 KDC SRF) ],
     XMP  => [ qw(SVG INX) ],
-    JP2  => [ qw(J2C JPC JXC) ],
+    JP2  => [ qw(J2C JPC) ],
     MOV  => [ qw(INSV) ],
 );
 
@@ -292,6 +292,7 @@ my %createTypes = map { $_ => 1 } qw(XMP ICC MIE VRD DR4 EXIF EXV);
     DWF  => ['DWF',  'Autodesk drawing (Design Web Format)'],
     DWG  => ['DWG',  'AutoCAD Drawing'],
     DYLIB=> ['EXE',  'Mach-O Dynamic Link Library'],
+    DXF  => ['DXF',  'AutoCAD Drawing Exchange Format'],
     EIP  => ['ZIP',  'Capture One Enhanced Image Package'],
     EPS  => ['EPS',  'Encapsulated PostScript Format'],
     EPS2 =>  'EPS',
@@ -355,8 +356,7 @@ my %createTypes = map { $_ => 1 } qw(XMP ICC MIE VRD DR4 EXIF EXV);
     JPM  => ['JP2',  'JPEG 2000 compound image'],
     JPX  => ['JP2',  'JPEG 2000 with extensions'],
     JSON => ['JSON', 'JavaScript Object Notation'],
-    JXC  => ['JP2', 'JPEG XL Codestream'], # (JXC = PH invention, not a real extension)
-    JXL  => ['JP2', 'JPEG XL'],
+    JXL  => ['JXL',  'JPEG XL'],
     JXR  => ['TIFF', 'JPEG XR'],
     K25  => ['TIFF', 'Kodak DC25 RAW'],
     KDC  => ['TIFF', 'Kodak Digital Camera RAW'],
@@ -396,6 +396,7 @@ my %createTypes = map { $_ => 1 } qw(XMP ICC MIE VRD DR4 EXIF EXV);
     MPG  =>  'MPEG',
     MPO  => ['JPEG', 'Extended Multi-Picture format'],
     MQV  => ['MOV',  'Sony Mobile Quicktime Video'],
+    MRC  => ['MRC',  'Medical Research Council image'],
     MRW  => ['MRW',  'Minolta RAW format'],
     MTS  =>  'M2TS',
     MXF  => ['MXF',  'Material Exchange Format'],
@@ -617,6 +618,7 @@ my %fileDescription = (
    'DVR-MS' => 'video/x-ms-dvr',
     DWF  => 'model/vnd.dwf',
     DWG  => 'image/vnd.dwg',
+    DXF  => 'application/dxf',
     EIP  => 'application/x-captureone', #(NC)
     EPS  => 'application/postscript',
     ERF  => 'image/x-epson-erf',
@@ -654,7 +656,6 @@ my %fileDescription = (
     JPM  => 'image/jpm',
     JPX  => 'image/jpx',
     JSON => 'application/json',
-    JXC  => 'image/x-jxc', #PH (invented)
     JXL  => 'image/jxl', #PH (NC)
     JXR  => 'image/jxr',
     K25  => 'image/x-kodak-k25',
@@ -681,6 +682,7 @@ my %fileDescription = (
     MP4  => 'video/mp4',
     MPC  => 'audio/x-musepack',
     MPEG => 'video/mpeg',
+    MRC  => 'image/x-mrc',
     MRW  => 'image/x-minolta-mrw',
     MXF  => 'application/mxf',
     NEF  => 'image/x-nikon-nef',
@@ -805,6 +807,7 @@ my %moduleName = (
     DSS  => 'Olympus',
     DWF  => 0,
     DWG  => 0,
+    DXF  => 0,
     EPS  => 'PostScript',
     EXIF => '',
     EXR  => 'OpenEXR',
@@ -880,6 +883,7 @@ $testLen = 1024;    # number of bytes to read when testing for magic number
     DV   => '\x1f\x07\0[\x3f\xbf]', # (not tested if extension recognized)
     DWF  => '\(DWF V\d',
     DWG  => 'AC10\d{2}\0',
+    DXF  => '\s*0\s+\0?\s*SECTION\s+2\s+HEADER',
     EPS  => '(%!PS|%!Ad|\xc5\xd0\xd3\xc6)',
     EXE  => '(MZ|\xca\xfe\xba\xbe|\xfe\xed\xfa[\xce\xcf]|[\xce\xcf]\xfa\xed\xfe|Joy!peff|\x7fELF|#!\s*/\S*bin/|!<arch>\x0a)',
     EXIF => '(II\x2a\0|MM\0\x2a)',
@@ -902,9 +906,10 @@ $testLen = 1024;    # number of bytes to read when testing for magic number
     IND  => '\x06\x06\xed\xf5\xd8\x1d\x46\xe5\xbd\x31\xef\xe7\xfe\x74\xb7\x1d',
   # ISO  =>  signature is at byte 32768
     ITC  => '.{4}itch',
-    JP2  => '(\0\0\0\x0cjP(  |\x1a\x1a)\x0d\x0a\x87\x0a|\xff\x4f\xff\x51\0|\xff\x0a|\0\0\0\x0cJXL \x0d\x0a......ftypjxl )',
+    JP2  => '(\0\0\0\x0cjP(  |\x1a\x1a)\x0d\x0a\x87\x0a|\xff\x4f\xff\x51\0)',
     JPEG => '\xff\xd8\xff',
     JSON => '(\xef\xbb\xbf)?\s*(\[\s*)?\{\s*"[^"]*"\s*:',
+    JXL  => '\xff\x0a|\0\0\0\x0cJXL \x0d\x0a......ftypjxl ',
     LFP  => '\x89LFP\x0d\x0a\x1a\x0a',
     LNK  => '.{4}\x01\x14\x02\0{5}\xc0\0{6}\x46',
     LRI  => 'LELR \0',
@@ -917,6 +922,7 @@ $testLen = 1024;    # number of bytes to read when testing for magic number
     MPC  => '(MP\+|ID3)',
     MOI  => 'V6',
     MPEG => '\0\0\x01[\xb0-\xbf]',
+    MRC  => '.{64}[\x01\x02\x03]\0\0\0[\x01\x02\x03]\0\0\0[\x01\x02\x03]\0\0\0.{132}MAP[\0 ](\x44\x44|\x44\x41|\x11\x11)\0\0',
     MRW  => '\0MR[MI]',
     MXF  => '\x06\x0e\x2b\x34\x02\x05\x01\x01\x0d\x01\x02', # (not tested if extension recognized)
     OGG  => '(OggS|ID3)',
@@ -7828,7 +7834,8 @@ sub GetTagInfo($$$;$$$)
             }
         }
         if ($$tagInfo{Unknown} and not $$self{OPTIONS}{Unknown} and
-            not $$self{OPTIONS}{Verbose} and not $$self{HTML_DUMP})
+            not $$self{OPTIONS}{Verbose} and not $$self{OPTIONS}{Validate} and
+            not $$self{HTML_DUMP})
         {
             # don't return Unknown tags unless that option is set
             return undef;
