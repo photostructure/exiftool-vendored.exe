@@ -28,7 +28,7 @@ use vars qw($VERSION $RELEASE @ISA @EXPORT_OK %EXPORT_TAGS $AUTOLOAD @fileTypes
             %mimeType $swapBytes $swapWords $currentByteOrder %unpackStd
             %jpegMarker %specialTags %fileTypeLookup $testLen $exePath);
 
-$VERSION = '12.26';
+$VERSION = '12.28';
 $RELEASE = '';
 @ISA = qw(Exporter);
 %EXPORT_TAGS = (
@@ -138,8 +138,8 @@ sub ReadValue($$$;$$$);
 @loadAllTables = qw(
     PhotoMechanic Exif GeoTiff CanonRaw KyoceraRaw Lytro MinoltaRaw PanasonicRaw
     SigmaRaw JPEG GIMP Jpeg2000 GIF BMP BMP::OS2 BMP::Extra BPG BPG::Extensions
-    PICT PNG MNG FLIF DjVu DPX OpenEXR ZISRAW MRC MRC::FEI12 MIFF PCX PGF PSP
-    PhotoCD Radiance PDF PostScript Photoshop::Header Photoshop::Layers
+    PICT PNG MNG FLIF DjVu DPX OpenEXR ZISRAW MRC LIF MRC::FEI12 MIFF PCX PGF
+    PSP PhotoCD Radiance PDF PostScript Photoshop::Header Photoshop::Layers
     Photoshop::ImageData FujiFilm::RAF FujiFilm::IFD Samsung::Trailer Sony::SRF2
     Sony::SR2SubIFD Sony::PMP ITC ID3 ID3::Lyrics3 FLAC Ogg Vorbis APE
     APE::NewHeader APE::OldHeader Audible MPC MPEG::Audio MPEG::Video MPEG::Xing
@@ -190,7 +190,7 @@ $defaultLang = 'en';    # default language
                 HTML VRD RTF FITS XCF DSS QTIF FPX PICT ZIP GZIP PLIST RAR BZ2
                 CZI TAR  EXE EXR HDR CHM LNK WMF AVC DEX DPX RAW Font RSRC M2TS
                 MacOS PHP PCX DCX DWF DWG DXF WTV Torrent VCard LRI R3D AA PDB
-                MRC JXL MOI ISO ALIAS JSON MP3 DICOM PCD TXT);
+                MRC LIF JXL MOI ISO ALIAS JSON MP3 DICOM PCD TXT);
 
 # file types that we can write (edit)
 my @writeTypes = qw(JPEG TIFF GIF CRW MRW ORF RAF RAW PNG MIE PSD XMP PPM EPS
@@ -366,6 +366,7 @@ my %createTypes = map { $_ => 1 } qw(XMP ICC MIE VRD DR4 EXIF EXV);
     LA   => ['RIFF', 'Lossless Audio'],
     LFP  => ['LFP',  'Lytro Light Field Picture'],
     LFR  =>  'LFP', # (Light Field RAW)
+    LIF  => ['LIF',  'Leica Image File'],
     LNK  => ['LNK',  'Windows shortcut'],
     LRI  => ['LRI',  'Light RAW'],
     LRV  => ['MOV',  'Low-Resolution Video'],
@@ -606,7 +607,7 @@ my %fileDescription = (
     DJVU => 'image/vnd.djvu',
     DNG  => 'image/x-adobe-dng',
     DOC  => 'application/msword',
-    DOCM => 'application/vnd.ms-word.document.macroEnabled',
+    DOCM => 'application/vnd.ms-word.document.macroEnabled.12',
     DOCX => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     DOT  => 'application/msword',
     DOTM => 'application/vnd.ms-word.template.macroEnabledTemplate',
@@ -664,6 +665,7 @@ my %fileDescription = (
     KDC  => 'image/x-kodak-kdc',
     KEY  => 'application/x-iwork-keynote-sffkey',
     LFP  => 'image/x-lytro-lfp', #PH (NC)
+    LIF  => 'image/x-lif',
     LNK  => 'application/octet-stream',
     LRI  => 'image/x-light-lri',
     M2T  => 'video/mpeg',
@@ -719,16 +721,16 @@ my %fileDescription = (
     PMP  => 'image/x-sony-pmp', #PH (NC)
     PNG  => 'image/png',
     POT  => 'application/vnd.ms-powerpoint',
-    POTM => 'application/vnd.ms-powerpoint.template.macroEnabled',
+    POTM => 'application/vnd.ms-powerpoint.template.macroEnabled.12',
     POTX => 'application/vnd.openxmlformats-officedocument.presentationml.template',
-    PPAM => 'application/vnd.ms-powerpoint.addin.macroEnabled',
+    PPAM => 'application/vnd.ms-powerpoint.addin.macroEnabled.12',
     PPAX => 'application/vnd.openxmlformats-officedocument.presentationml.addin', # (NC, PH invented)
     PPM  => 'image/x-portable-pixmap',
     PPS  => 'application/vnd.ms-powerpoint',
-    PPSM => 'application/vnd.ms-powerpoint.slideshow.macroEnabled',
+    PPSM => 'application/vnd.ms-powerpoint.slideshow.macroEnabled.12',
     PPSX => 'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
     PPT  => 'application/vnd.ms-powerpoint',
-    PPTM => 'application/vnd.ms-powerpoint.presentation.macroEnabled',
+    PPTM => 'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
     PPTX => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     PS   => 'application/postscript',
     PSD  => 'application/vnd.adobe.photoshop',
@@ -775,13 +777,13 @@ my %fileDescription = (
     X3F  => 'image/x-sigma-x3f',
     XCF  => 'image/x-xcf',
     XLA  => 'application/vnd.ms-excel',
-    XLAM => 'application/vnd.ms-excel.addin.macroEnabled',
+    XLAM => 'application/vnd.ms-excel.addin.macroEnabled.12',
     XLS  => 'application/vnd.ms-excel',
-    XLSB => 'application/vnd.ms-excel.sheet.binary.macroEnabled',
-    XLSM => 'application/vnd.ms-excel.sheet.macroEnabled',
+    XLSB => 'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+    XLSM => 'application/vnd.ms-excel.sheet.macroEnabled.12',
     XLSX => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     XLT  => 'application/vnd.ms-excel',
-    XLTM => 'application/vnd.ms-excel.template.macroEnabled',
+    XLTM => 'application/vnd.ms-excel.template.macroEnabled.12',
     XLTX => 'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
     XML  => 'application/xml',
     XMP  => 'application/rdf+xml',
@@ -913,6 +915,7 @@ $testLen = 1024;    # number of bytes to read when testing for magic number
     JSON => '(\xef\xbb\xbf)?\s*(\[\s*)?\{\s*"[^"]*"\s*:',
     JXL  => '\xff\x0a|\0\0\0\x0cJXL \x0d\x0a......ftypjxl ',
     LFP  => '\x89LFP\x0d\x0a\x1a\x0a',
+    LIF  => '\x70\0{3}.{4}\x2a.{4}<\0',
     LNK  => '.{4}\x01\x14\x02\0{5}\xc0\0{6}\x46',
     LRI  => 'LELR \0',
     M2TS => '(....)?\x47',
@@ -3309,8 +3312,9 @@ sub GetTagID($$)
     my ($self, $tag) = @_;
     my $tagInfo = $$self{TAG_INFO}{$tag};
     return '' unless $tagInfo and defined $$tagInfo{TagID};
-    return ($$tagInfo{TagID}, $$tagInfo{LangCode}) if wantarray;
-    return $$tagInfo{TagID};
+    my $id = $$tagInfo{KeysID} || $$tagInfo{TagID};
+    return ($id, $$tagInfo{LangCode}) if wantarray;
+    return $id;
 }
 
 #------------------------------------------------------------------------------
@@ -3426,7 +3430,7 @@ sub GetGroup($$;$)
         }
         # generate tag ID group names unless obviously not needed
         unless ($noID) {
-            my $id = $$tagInfo{TagID};
+            my $id = $$tagInfo{KeysID} || $$tagInfo{TagID};
             if (not defined $id) {
                 $id = '';   # (just to be safe)
             } elsif ($id =~ /^\d+$/) {
