@@ -8,5 +8,3 @@ node_modules/
 # These are ExifTool's ~800 doc and test files:
 bin/exiftool_files/t/
 bin/exiftool_files/html/
-
-.dl/
