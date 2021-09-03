@@ -98,7 +98,7 @@ my %insvLimit = (
         The tags below are extracted from timed metadata in QuickTime and other
         formats of video files when the ExtractEmbedded option is used.  Although
         most of these tags are combined into the single table below, ExifTool
-        currently reads 53 different formats of timed GPS metadata from video files.
+        currently reads 55 different formats of timed GPS metadata from video files.
     },
     VARS => { NO_ID => 1 },
     GPSLatitude  => { PrintConv => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "N")', RawConv => '$$self{FoundGPSLatitude} = 1; $val' },
@@ -1230,7 +1230,10 @@ sub ProcessSamples($)
             $et->VPrint(1, "${hdr}, Sample ".($i+1).' of '.scalar(@$start)." ($size bytes)\n");
             $et->VerboseDump(\$buff, Addr => $$start[$i]);
         }
-        if ($type eq 'text') {
+        if ($type eq 'text' or
+            # (PNDM is normally 'text', but was sbtl/tx3g in concatenated Garmin sample output_3videos.mp4)
+            ($type eq 'sbtl' and $metaFormat eq 'tx3g' and $buff =~ /^..PNDM/s))
+        {
 
             FoundSomething($et, $tagTbl, $time[$i], $dur[$i]);
             unless ($buff =~ /^\$BEGIN/) {
@@ -2107,9 +2110,9 @@ sub Process_mebx($$$)
 
     # parse using information from 'keys' table (eg. Apple iPhone7+ hevc 'Core Media Data Handler')
     $et->VerboseDir('mebx', undef, length $$dataPt);
-    my $pos = 0;
-    while ($pos + 8 < length $$dataPt) {
-        my $len = Get32u($dataPt, $pos);
+    my ($pos, $len);
+    for ($pos=0; $pos+8<length($$dataPt); $pos+=$len) {
+        $len = Get32u($dataPt, $pos);
         last if $len < 8 or $pos + $len > length $$dataPt;
         my $id = substr($$dataPt, $pos+4, 4);
         my $info = $$ee{'keys'}{$id};
@@ -2132,7 +2135,6 @@ sub Process_mebx($$$)
         } else {
             $et->WarnOnce('No key information for mebx ID ' . PrintableTagID($id,1));
         }
-        $pos += $len;
     }
     return 1;
 }
@@ -2645,12 +2647,19 @@ sub ProcessInsta360($;$)
                     my $tmp = substr($buff, $p, $dlen);
                     my @a = unpack('VVvaa8aa8aa8a8a8', $tmp);
                     next unless $a[3] eq 'A';   # (ignore void fixes)
-                    last unless ($a[5] eq 'N' or $a[5] eq 'S') and # (quick validation)
-                                ($a[7] eq 'E' or $a[7] eq 'W');
+                    unless (($a[5] eq 'N' or $a[5] eq 'S') and # (quick validation)
+                            ($a[7] eq 'E' or $a[7] eq 'W' or 
+                             # (odd, but I've seen "O" instead of "W".  Perhaps
+                             #  when the language is french? ie. "Ouest"?)
+                             $a[7] eq 'O'))
+                    {
+                        $et->Warn('Unrecognized INSV GPS format');
+                        last;
+                    }
                     $$et{DOC_NUM} = ++$$et{DOC_COUNT};
                     $a[$_] = GetDouble(\$a[$_], 0) foreach 4,6,8,9,10;
                     $a[4] = -abs($a[4]) if $a[5] eq 'S'; # (abs just in case it was already signed)
-                    $a[6] = -abs($a[6]) if $a[7] eq 'W';
+                    $a[6] = -abs($a[6]) if $a[7] ne 'E';
                     $et->HandleTag($tagTbl, GPSDateTime => Image::ExifTool::ConvertUnixTime($a[0]) . 'Z');
                     $et->HandleTag($tagTbl, GPSLatitude => $a[4]);
                     $et->HandleTag($tagTbl, GPSLongitude => $a[6]);
