@@ -34,7 +34,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::Minolta;
 
-$VERSION = '3.45';
+$VERSION = '3.46';
 
 sub ProcessSRF($$$);
 sub ProcessSR2($$$);
@@ -154,6 +154,7 @@ sub PrintInvLensSpec($;$$);
     32866 => 'Sony FE 24mm F2.8 G', #IB
     32867 => 'Sony FE 40mm F2.5 G', #IB
     32868 => 'Sony FE 50mm F2.5 G', #IB
+    32874 => 'Sony FE 70-200mm F2.8 GM OSS II', #IB
 
   # (comment this out so LensID will report the LensModel, which is more useful)
   # 32952 => 'Metabones Canon EF Speed Booster Ultra', #JR (corresponds to 184, but 'Advanced' mode, LensMount reported as E-mount)
@@ -196,6 +197,7 @@ sub PrintInvLensSpec($;$$);
     49465 => 'Tamron 17-70mm F2.8 Di III-A VC RXD', #JR (Model B070)
     49466 => 'Tamron 150-500mm F5-6.7 Di III VC VXD', #JR (Model A057)
     49467 => 'Tamron 11-20mm F2.8 Di III-A RXD', #JR (Model B060)
+    49468 => 'Tamron 18-300mm F3.5-6.3 Di III-A VC VXD', #JR (Model B061)
 
     49473 => 'Tokina atx-m 85mm F1.8 FE or Viltrox lens', #JR
     49473.1 => 'Viltrox 23mm F1.4 E', #JR
@@ -8373,8 +8375,8 @@ my %isoSetting2010 = (
     GROUPS => { 0 => 'MakerNotes', 2 => 'Image' },
     DATAMEMBER => [ 0x04 ],
     0x04 => {
-        # seen values 0,2,3,18,32,49,50,83,148
-        # CameraTemperature is valid for all values except 0,148
+        # seen values 0,2,3,18,19,32,49,50,83,130,132,148,213,229,255
+        # CameraTemperature is valid for all values above except ==0 and >=130 
         Name => 'TempTest2',
         DataMember => 'TempTest2',
         Hidden => 1,
