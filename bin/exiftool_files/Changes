@@ -7,11 +7,67 @@ RSS feed: https://exiftool.org/rss.xml
 Note: The most recent production release is Version 12.30. (Other versions are
 considered development releases, and are not uploaded to MetaCPAN.)
 
+Dec. 20, 2021 - Version 12.38
+
+  - Decode a number of new tags for the Nikon Z9 (thanks Warren Hatch)
+  - Patched incorrect decoding of AEBShotCount for the Canon EOS 90D
+  - Patched EXR reader to support long tag names
+  - Patched security issue (thanks Joe Lothan)
+  - Fixed an incorrect tag ID for a new Nikon MakerNote tag (github #108)
+  - Fixed XMP-exif:GPSMeasureMode conversions to match EXIF
+  - Fixed problem where some namespaces may be undeclared in the -X output when
+    using the -struct option
+
+Dec. 8, 2021 - Version 12.37
+
+  - Decode timed GPS from Vantrue S1 dashcam MP4 videos
+  - Decode ColorData tags for the Canon EOS R3 (thanks LibRaw)
+  - Decode more makernotes tags for Nikon Z cameras (thanks Warren Hatch)
+  - Extract TransparentColor from GIF images
+  - Improved parsing of input time values for GPSTimeStamp to properly handle a
+    "." separator
+  - Improved warning when incorrectly using "
+
+Nov. 16, 2021 - Version 12.36
+
+  - IMPORTANT: Fixed bug introduced in 12.35 which corrupted JPEG 2000 images
+    when removing all metadata with -all=
+  - Added feature to bypass processing of specified XMP namespaces and
+    properties (to improve performance in cases where the XMP suffers from
+    Adobe-editing bloat)
+  - Added a number of new XMP tags used by Lightroom 11.0
+  - Decode a number of new Nikon tags (thanks Warren Hatch)
+  - Made the Composite GPSPosition tag writable
+  - Fixed erroneous "Skipped unknown bytes after JPEG SOS" warning
+  - Fixed group for new writable Jpeg2000 color tags in -listx output
+  - Fixed problem finding files in Windows when using wildcards in file name and
+    a drive letter with no slash
+
+Nov. 11, 2021 - Version 12.35
+
+  - Added ability to write ICC_Profile (and other color specifications) to
+    Jpeg2000 images
+  - Added %o code to -W option format string
+  - Added %f code to -d option for fractional seconds
+  - Added a couple of new Sony LensType values (thanks Jos Roost)
+  - Added a new CanonModelID (thanks Norbert Wasser)
+  - Added a new Nikon LensID
+  - Decode more Nikon MakerNotes tags for some new models (thanks Warren Hatch)
+  - Extract ThumbnailImage from some DJI drone videos
+  - Enhanced -ee option to extract metadata from all frames in a SEQ file
+  - Patched to avoid possible "Use of uninitialized value" runtime warning
+  - Fixed a couple of misspelt new ICC_Profile tag names (thanks Herb)
+  - Fixed problem generating the correct file extension when extracting
+    OriginalRawImage from a DNG file using the -W option with the %s format code
+  - Fixed bug introduced in 11.91 where exiftool couldn't find its libraries
+    when run via a soft link.  Also changed to look for config file in the link
+    target directory instead of the directory of the link itself
+
 Oct. 27, 2021 - Version 12.34
 
   - Added support for ICC.2:2019 (Profile version 5.0.0 - iccMAX) color profiles
   - Added ability to detect/delete a Windows Zone.Identifier alternate data
-    stream (ADS) via the new ZoneIdentifier tag
+    stream (ADS) via the new ZoneIdentifier tag (thanks Alex Xu)
   - Added support for the Sony ILCE-7M4 (thanks Jos Roost)
   - Added a new Sony lens (thanks LibRaw and Jos Roost)
   - Added a new SonyModelID (thanks LibRaw)
@@ -19,7 +75,7 @@ Oct. 27, 2021 - Version 12.34
   - Improved handling of some SVG files
   - Patched -overwrite_original_in_place option to open the output file in
     update mode rather than write mode (to allow some write optimizations on
-    certain filesystems)
+    certain filesystems) (thanks Joel Low)
   - Fixed case of tag ID for new XMP-iptcExt:EventID (thanks Michael Steidl)
   - Fixed problem extracting ICC_Profile information from some PDF files
   - API Changes:
@@ -152,6 +208,8 @@ May 20, 2021 - Version 12.26 (production release)
   - Patched security vulnerability in argument of -lang option
   - Fixed problem which could cause a "Wide character" warning and generate a
     corrupted output file when writing some illegal values
+
+History of older versions (back to Nov. 19, 2003 - Version 1.00) -->
 
 Apr. 22, 2021 - Version 12.25
 
@@ -635,6 +693,7 @@ Mar. 19, 2020 - Version 11.92
 
 Mar. 5, 2020 - Version 11.91
 
+  - Added undocumented -xpath option for use by alternate Windows version
   - Decode a couple of new Panasonic tags
   - Documented -ec option (available since version 11.54)
   - Reverted -htmlDump fix of 11.90 because it broke more than it fixed, and

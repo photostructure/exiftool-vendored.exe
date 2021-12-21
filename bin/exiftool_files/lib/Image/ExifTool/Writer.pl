@@ -154,7 +154,7 @@ my %delMore = (
 );
 
 # family 0 groups where directories should never be deleted
-my %permanentDir = ( QuickTime => 1 );
+my %permanentDir = ( QuickTime => 1, Jpeg2000 => 1 );
 
 # lookup for all valid family 2 groups (lower case)
 my %family2groups = map { lc $_ => 1 } @delGroup2, 'Unknown';
@@ -1400,7 +1400,10 @@ sub SetNewValuesFromFile($$;@)
                 }
             }
             # validate tag name(s)
-            $$opts{EXPR} or ValidTagName($tag) or $self->Warn("Invalid tag name '${tag}'"), next;
+            unless ($$opts{EXPR} or ValidTagName($tag)) {
+                $self->Warn("Invalid tag name '${tag}'. Use '=' not '<' to assign a tag value");
+                next;
+            }
             ValidTagName($dstTag) or $self->Warn("Invalid tag name '${dstTag}'"), next;
             # translate '+' and '-' to appropriate SetNewValue option
             if ($opt) {
@@ -4775,7 +4778,7 @@ sub InverseDateTime($$;$$)
     my ($rtnVal, $tz);
     my $fmt = $$self{OPTIONS}{DateFormat};
     # strip off timezone first if it exists
-    if (not $fmt and $val =~ s/([+-])(\d{1,2}):?(\d{2})\s*(DST)?$//i) {
+    if (not $fmt and $val =~ s/([-+])(\d{1,2}):?(\d{2})\s*(DST)?$//i) {
         $tz = sprintf("$1%.2d:$3", $2);
     } elsif (not $fmt and $val =~ s/Z$//i) {
         $tz = 'Z';
@@ -4798,6 +4801,8 @@ sub InverseDateTime($$;$$)
                 $strptimeLib = '';
             }
         }
+        # handle factional seconds (%f), but only at the end of the string
+        my $fs = ($fmt =~ s/%f$// and $val =~ s/(\.\d+)\s*$//) ? $1 : '';
         my ($lib, $wrn, @a);
 TryLib: for ($lib=$strptimeLib; ; $lib='') {
             if (not $lib) {
@@ -4834,10 +4839,10 @@ TryLib: for ($lib=$strptimeLib; ; $lib='') {
                         next TryLib;
                     }
                 } elsif (length($a[$i]) < 2) {
-                    $$a[$i] = "0$a[$i]";# pad to 2 digits if necessary
+                    $a[$i] = "0$a[$i]"; # pad to 2 digits if necessary
                 }
             }
-            $val = join(':', @a[5,4,3]) . ' ' . join(':', @a[2,1,0]);
+            $val = join(':', @a[5,4,3]) . ' ' . join(':', @a[2,1,0]) . $fs;
             last;
         }
     }

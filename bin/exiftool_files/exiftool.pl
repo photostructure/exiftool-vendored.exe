@@ -10,15 +10,15 @@
 use strict;
 require 5.004;
 
-my $version = '12.34';
+my $version = '12.38';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
-my $exeDir;
+my $exePath;
 BEGIN {
     # (undocumented -xpath option added in 11.91, must come before other options)
-    $Image::ExifTool::exePath = @ARGV && lc($ARGV[0]) eq '-xpath' && shift() ? $^X : $0;
+    $exePath = @ARGV && lc($ARGV[0]) eq '-xpath' && shift() ? $^X : $0;
     # get exe directory
-    $exeDir = ($Image::ExifTool::exePath =~ /(.*)[\\\/]/) ? $1 : '.';
+    $Image::ExifTool::exeDir = ($exePath =~ /(.*)[\\\/]/) ? $1 : '.';
     # (no link following for Windows exe version)
     # add lib directory at start of include path
     unshift @INC, ($0 =~ /(.*)[\\\/]/) ? "$1/lib" : './lib';
@@ -350,7 +350,7 @@ sub Cleanup() {
 #
 
 # add arguments embedded in filename (Windows .exe version only)
-if ($Image::ExifTool::exePath =~ /\(([^\\\/]+)\)(.exe|.pl)?$/i) {
+if ($exePath =~ /\(([^\\\/]+)\)(.exe|.pl)?$/i) {
     my $argstr = $1;
     # divide into separate quoted or whitespace-delineated arguments
     my (@args, $arg, $quote);
@@ -773,7 +773,7 @@ for (;;) {
         }
         my $fp = ($stayOpen == 1 ? \*STAYOPEN : \*ARGFILE);
         unless ($mt->Open($fp, $argFile)) {
-            unless ($argFile !~ /^\// and $mt->Open($fp, "$exeDir/$argFile")) {
+            unless ($argFile !~ /^\// and $mt->Open($fp, "$Image::ExifTool::exeDir/$argFile")) {
                 Error "Error opening arg file $argFile\n";
                 $badCmd = 1;
                 next
@@ -1251,7 +1251,7 @@ for (;;) {
         $textOverwrite += 2 if $t2 =~ /\+/; # append
         if ($t1 ne 'W' and lc($t1) ne 'tagout') {
             undef $tagOut;
-        } elsif ($textOverwrite >= 2 and $textOut !~ /%[-+]?\d*[.:]?\d*[lu]?[tgs]/) {
+        } elsif ($textOverwrite >= 2 and $textOut !~ /%[-+]?\d*[.:]?\d*[lu]?[tgso]/) {
             $tagOut = 0; # append tags to one file
         } else {
             $tagOut = 1; # separate file for each tag
@@ -1967,6 +1967,7 @@ sub GetImageInfo($$)
             } else {
                 $pipe = qq{bzip2 -dc "$file" |};
             }
+            $$et{TRUST_PIPE} = 1;
         }
     }
     # evaluate -if expression for conditional processing
@@ -2237,12 +2238,13 @@ sub GetImageInfo($$)
                         next unless defined $forcePrint;
                         $grp0 = $grp1 = 'Unknown';
                     }
+                    # add groups from structure fields
+                    AddGroups($$info{$tag}, $grp0, \%groups, \@groups) if ref $$info{$tag};
                     next if $groups{$grp1};
                     # include family 0 and 1 groups in URI except for internal tags
                     # (this will put internal tags in the "XML" group on readback)
                     $groups{$grp1} = $grp0;
                     push @groups, $grp1;
-                    AddGroups($$info{$tag}, $grp0, \%groups, \@groups) if ref $$info{$tag};
                 }
                 foreach $grp1 (@groups) {
                     my $grp = $groups{$grp1};
@@ -2365,7 +2367,8 @@ TAG:    foreach $tag (@foundTags) {
                     }
                     my @groups = $et->GetGroup($tag);
                     $outfile and close($fp), undef($tmpText); # (shouldn't happen)
-                    ($fp, $outfile, $append) = OpenOutputFile($orig, $tagName, \@groups, $ext);
+                    my $org = $et->GetValue('OriginalRawFileName') || $et->GetValue('OriginalFileName');
+                    ($fp, $outfile, $append) = OpenOutputFile($orig, $tagName, \@groups, $ext, $org);
                     $fp or ++$countBad, next TAG;
                     $tmpText = $outfile unless $append;
                 }
@@ -3464,18 +3467,26 @@ sub ConvertBinary($)
 }
 
 #------------------------------------------------------------------------------
-# Compare two tag values to see if they are equal
+# Compare ValueConv and PrintConv values of a tag to see if they are equal
 # Inputs: 0) value1, 1) value2
 # Returns: true if they are equal
 sub IsEqual($$)
 {
-    return 1 if ref $_[0] eq 'SCALAR' or $_[0] eq $_[1];
-    return 0 if ref $_[0] ne 'ARRAY' or ref $_[1] ne 'ARRAY' or
-                @{$_[0]} ne @{$_[1]};
-    # test all elements of an array
-    my $i = 0;
-    for ($i=0; $i<scalar(@{$_[0]}); ++$i) {
-        return 0 if $_[0][$i] ne $_[1][$i];
+    my ($a, $b) = @_;
+    # (scalar values are not print-converted)
+    return 1 if $a eq $b or ref $a eq 'SCALAR';
+    if (ref $a eq 'HASH' and ref $b eq 'HASH') {
+        return 0 if scalar(keys %$a) != scalar(keys %$b);
+        my $key;
+        foreach $key (keys %$a) {
+            return 0 unless IsEqual($$a{$key}, $$b{$key});
+        }
+    } else {
+        return 0 if ref $a ne 'ARRAY' or ref $b ne 'ARRAY' or @$a != @$b;
+        my $i;
+        for ($i=0; $i<scalar(@$a); ++$i) {
+            return 0 unless IsEqual($$a[$i], $$b[$i]);
+        }
     }
     return 1;
 }
@@ -3803,7 +3814,7 @@ sub FindFileWindows($$)
     my $enc = $et->Options('CharsetFileName');
     $wildfile = $et->Decode($wildfile, $enc, undef, 'UTF8') if $enc and $enc ne 'UTF8';
     $wildfile =~ tr/\\/\//; # use forward slashes
-    my ($dir, $wildname) = ($wildfile =~ m{(.*/)(.*)}) ? ($1, $2) : ('', $wildfile);
+    my ($dir, $wildname) = ($wildfile =~ m{(.*[:/])(.*)}) ? ($1, $2) : ('', $wildfile);
     if ($dir =~ /[*?]/) {
         Warn "Wildcards don't work in the directory specification\n";
         return ();
@@ -3943,7 +3954,7 @@ sub SuggestedExtension($$$)
         $ext = 'xml';
     } elsif ($$valPt =~ /^RIFF....WAVE/s) {
         $ext = 'wav';
-    } elsif ($tag eq 'OriginalRawFileData' and defined($ext = $et->GetValue('OriginalRawFileName'))) {
+    } elsif ($tag eq 'OriginalRawImage' and defined($ext = $et->GetValue('OriginalRawFileName'))) {
         $ext =~ s/^.*\.//s;
         $ext = $ext ? lc($ext) : 'raw';
     } elsif ($tag eq 'EXIF') {
@@ -3995,14 +4006,15 @@ sub LoadPrintFormat($)
 # A sort of sprintf for filenames
 # Inputs: 0) format string (%d=dir, %f=file name, %e=ext),
 #         1) source filename or undef to test format string
-#         2-4) [%t %g %s only] tag name, ref to array of group names, suggested extension
+#         2-4) [%t %g %s %o only] tag name, ref to array of group names,
+#              suggested extension, original raw file name
 # Returns: new filename or undef on error (or if no file and fmt contains token)
 sub FilenameSPrintf($;$@)
 {
     my ($fmt, $file, @extra) = @_;
     local $_;
     # return format string straight away if no tokens
-    return $fmt unless $fmt =~ /%[-+]?\d*[.:]?\d*[lu]?[dDfFeEtgs]/;
+    return $fmt unless $fmt =~ /%[-+]?\d*[.:]?\d*[lu]?[dDfFeEtgso]/;
     return undef unless defined $file;
     CleanFilename($file);   # make sure we are using forward slashes
     # split filename into directory, file, extension
@@ -4016,9 +4028,9 @@ sub FilenameSPrintf($;$@)
     }
     $part{F} = $part{f} . $part{E};
     ($part{D} = $part{d}) =~ s{/+$}{};
-    @part{qw(t g s)} = @extra;
+    @part{qw(t g s o)} = @extra;
     my ($filename, $pos) = ('', 0);
-    while ($fmt =~ /(%([-+]?)(\d*)([.:]?)(\d*)([lu]?)([dDfFeEtgs]))/g) {
+    while ($fmt =~ /(%([-+]?)(\d*)([.:]?)(\d*)([lu]?)([dDfFeEtgso]))/g) {
         $filename .= substr($fmt, $pos, pos($fmt) - $pos - length($1));
         $pos = pos($fmt);
         my ($sign, $wid, $dot, $skip, $mod, $code) = ($2, $3, $4, $5 || 0, $6, $7);
@@ -4181,7 +4193,7 @@ sub OpenOutputFile($;@)
     if ($textOut) {
         $outfile = $file;
         CleanFilename($outfile);
-        if ($textOut =~ /%[-+]?\d*[.:]?\d*[lun]?[dDfFeEtgscC]/ or defined $tagOut) {
+        if ($textOut =~ /%[-+]?\d*[.:]?\d*[lun]?[dDfFeEtgsocC]/ or defined $tagOut) {
             # make filename from printf-like $textOut
             $outfile = FilenameSPrintf($textOut, $file, @args);
             return () unless defined $outfile;
@@ -4726,6 +4738,15 @@ OPTIONS
          4 below). Instead, individual tags may be recovered using the
          -tagsFromFile option (eg. "-all= -tagsfromfile @ -artist").
 
+         To speed processing when reading XMP, exclusions in XMP groups also
+         bypass processing of the corresponding XMP property and any
+         contained properties. For example, "--xmp-crs:all" may speed
+         processing significantly in cases where a large number of XMP-crs
+         tags exist. To use this feature to bypass processing of a specific
+         XMP property, the property name must be used instead of the
+         ExifTool tag name (eg. "--xmp-crs:dabs"). Also, "XMP-all" may be
+         used to to indicate any XMP namespace (eg. <C--xmp-all:dabs>).
+
     -*TAG*[+-^]=[*VALUE*]
          Write a new value for the specified tag (eg. "-comment=wow"), or
          delete the tag if no *VALUE* is given (eg. "-comment="). "+=" and
@@ -4736,7 +4757,8 @@ OPTIONS
          may be used to conditionally delete or replace a tag (see "WRITING
          EXAMPLES" for examples). "^=" is used to write an empty string
          instead of deleting the tag when no *VALUE* is given, but otherwise
-         it is equivalent to "=".
+         it is equivalent to "=", but note that the caret must be quoted on
+         the Windows command line.
 
          *TAG* may contain one or more leading family 0, 1, 2 or 7 group
          names, prefixed by optional family numbers, and separated colons.
@@ -5192,7 +5214,10 @@ OPTIONS
          "strftime" man page on your system for details. The default format
          is equivalent to "%Y:%m:%d %H:%M:%S". This option has no effect on
          date-only or time-only tags and ignores timezone information if
-         present. Only one -d option may be used per command. Requires
+         present. ExifTool adds a %f format code to represent fractional
+         seconds, and supports an optional width to specify the number of
+         digits after the decimal point (eg. %3f would give something like
+         .437). Only one -d option may be used per command. Requires
          POSIX::strptime or Time::Piece for the inversion conversion when
          writing.
 
@@ -5421,7 +5446,8 @@ OPTIONS
          beginning with "#" are output for each processed file. Lines
          beginning with "#[IF]" are not output, but all BODY lines are
          skipped if any tag on an IF line doesn't exist. Other lines
-         beginning with "#" are ignored. For example, this format file:
+         beginning with "#" are ignored. (To output a line beginning with
+         "#", use "#[BODY]#".) For example, this format file:
 
              # this is a comment line
              #[HEAD]-- Generated by ExifTool $exifToolVersion --
@@ -5435,7 +5461,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.34 --
+             -- Generated by ExifTool 12.38 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -5692,13 +5718,15 @@ OPTIONS
 
          1) With -W, a new output file is created for each extracted tag.
 
-         2) -W supports three additional format codes: %t, %g and %s
+         2) -W supports four additional format codes: %t, %g and %s
          represent the tag name, group name, and suggested extension for the
-         output file (based on the format of the data). The %g code may be
-         followed by a single digit to specify the group family number (eg.
-         %g1), otherwise family 0 is assumed. The substring
-         width/position/case specifiers may be used with these format codes
-         in exactly the same way as with %f and %e.
+         output file (based on the format of the data), and %o represents
+         the value of the OriginalRawFileName or OriginalFileName tag from
+         the input file (including extension). The %g code may be followed
+         by a single digit to specify the group family number (eg. %g1),
+         otherwise family 0 is assumed. The substring width/position/case
+         specifiers may be used with these format codes in exactly the same
+         way as with %f and %e.
 
          3) The argument for -W is interpreted as a file name if it contains
          no format codes. (For -w, this would be a file extension.) This
@@ -5720,7 +5748,7 @@ OPTIONS
          file names to the console instead of giving a verbose dump of the
          entire file. (Unless appending all output to one file for each
          source file by using -W+ with an output file *FMT* that does not
-         contain %t, $g or %s.)
+         contain %t, %g, %s or %o.)
 
          5) Individual list items are stored in separate files when -W is
          combined with -b, but note that for separate files to be created %c

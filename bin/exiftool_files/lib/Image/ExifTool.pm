@@ -26,10 +26,10 @@ use vars qw($VERSION $RELEASE @ISA @EXPORT_OK %EXPORT_TAGS $AUTOLOAD @fileTypes
             $psAPP13hdr $psAPP13old @loadAllTables %UserDefined $evalWarning
             %noWriteFile %magicNumber @langs $defaultLang %langName %charsetName
             %mimeType $swapBytes $swapWords $currentByteOrder %unpackStd
-            %jpegMarker %specialTags %fileTypeLookup $testLen $exePath
+            %jpegMarker %specialTags %fileTypeLookup $testLen $exeDir
             %static_vars);
 
-$VERSION = '12.34';
+$VERSION = '12.38';
 $RELEASE = '';
 @ISA = qw(Exporter);
 %EXPORT_TAGS = (
@@ -1211,10 +1211,10 @@ my %systemTagsNotes = (
     ZoneIdentifier => {
         Groups => { 1 => 'System', 2 => 'Other' },
         Notes => q{
-            Windows only.  Used to indicate that a file has a Zone.Identifier alternate
-            data stream, which is used by some Windows browsers to mark downloaded files
-            as possibly unsafe to run.  May be deleted to remove this stream.  Requires
-            Win32API::File
+            Windows only.  Existence indicates that the file has a Zone.Identifier
+            alternate data stream, which is used by some Windows browsers to mark
+            downloaded files as possibly unsafe to run.  May be deleted to remove this
+            stream.  Requires Win32API::File
         },
         Writable => 1,
         WritePseudo => 1,
@@ -4088,8 +4088,9 @@ sub Open($*$;$)
     my ($self, $fh, $file, $mode) = @_;
 
     $file =~ s/^([\s&])/.\/$1/; # protect leading whitespace or ampersand
-    # default to read mode ('<') unless input is a pipe
-    $mode = ($file =~ /\|$/ ? '' : '<') unless $mode;
+    # default to read mode ('<') unless input is a trusted pipe
+    $mode = (($file =~ /\|$/ and $$self{TRUST_PIPE}) ? '' : '<') unless $mode;
+    undef $$self{TRUST_PIPE};
     if ($mode) {
         if ($self->EncodeFileName($file)) {
             # handle Windows Unicode file name
@@ -4252,6 +4253,7 @@ sub ParseArguments($;@)
     $$self{REQ_TAG_LOOKUP}  = { };
     $$self{EXCL_TAG_LOOKUP} = { };
     $$self{IO_TAG_LIST} = undef;
+    delete $$self{EXCL_XMP_LOOKUP};
 
     # handle our input arguments
     while (@_) {
@@ -4335,7 +4337,11 @@ sub ParseArguments($;@)
     # generate lookup for excluded tags
     if ($$options{Exclude}) {
         foreach (@{$$options{Exclude}}) {
-            /([-\w]+)#?$/ and $$self{EXCL_TAG_LOOKUP}{lc($1)} = 1;
+            /([-\w]+)#?$/ and $$self{EXCL_TAG_LOOKUP}{lc $1} = 1;
+            if (/(xmp-.*:[-\w]+)#?/i) {
+                $$self{EXCL_XMP_LOOKUP} or $$self{EXCL_XMP_LOOKUP} = { };
+                $$self{EXCL_XMP_LOOKUP}{lc $1} = 1;
+            }
         }
         # exclude list is used only for EXCL_TAG_LOOKUP when TAGS_FROM_FILE is set
         undef $$options{Exclude} if $$self{TAGS_FROM_FILE};
@@ -5677,6 +5683,38 @@ sub ConvertDateTime($$)
             unshift @a, 1 while @a < 3; # add month and day if necessary
             unshift @a, 0 while @a < 6; # add h,m,s if necessary
             $a[4] -= 1;                 # base month is 1
+            # parse our %f fractional seconds first (and round up seconds if necessary)
+            # - if there are multiple %f codes, they all get the same number of digits as the first
+            if ($fmt =~ /%\.?(\d*)f/) {
+                my $dig = $1;
+                my $frac = $date =~ /(\.\d+)/ ? $1 : '';
+                if (not $frac) {
+                    $frac = '.' . ('0' x $dig) if $dig;
+                } elsif (length $dig) {
+                    if ($dig+1 > length($frac)) {
+                        $frac .= '0' x ($dig+1-length($frac));
+                    } elsif ($dig+1 < length($frac)) {
+                        $frac = sprintf("%.${dig}f", $frac);
+                        while ($frac =~ s/^(\d)// and $1 ne '0') {
+                            # this is a pain, but we must round up to the next second
+                            ++$a[0] < 60 and last;
+                            $a[0] = 0;
+                            ++$a[1] < 60 and last;
+                            $a[1] = 0;
+                            ++$a[2] < 24 and last;
+                            $a[2] = 0;
+                            require 'Image/ExifTool/Shift.pl';
+                            ++$a[3] <= DaysInMonth($a[4]+1, $a[5]) and last;
+                            $a[3] = 1;
+                            ++$a[4] < 12 and last;
+                            $a[4] = 0;
+                            ++$a[5];
+                            last; # (this was a goto)
+                        }
+                    } 
+                }
+                $fmt =~ s/(^|[^%])((%%)*)%\.?\d*f/$1$2$frac/g;
+            }
             # parse %z and %s ourself (to handle time zones properly)
             if ($fmt =~ /%[sz]/) {
                 # use system time zone unless otherwise specified
@@ -6277,7 +6315,7 @@ sub ProcessJPEG($$)
         my $markerName = JpegMarkerName($marker);
         $$path[$pn] = $markerName;
         # issue warning if we skipped some garbage
-        if ($skipped and not $foundSOS) {
+        if ($skipped and not $foundSOS and $markerName ne 'SOS') {
             $self->Warn("Skipped unknown $skipped bytes after JPEG $markerName segment", 1);
             if ($htmlDump) {
                 $self->HDump($nextSegPos-4-$skipped, $skipped, "[unknown $skipped bytes]", undef, 0x08);
@@ -8736,6 +8774,7 @@ sub ProcessBinaryData($$$)
         # read value now if necessary
         unless (defined $val and not $$tagInfo{SubDirectory}) {
             $val = ReadValue($dataPt, $entry+$offset, $format, $count, $more, \$rational);
+            next unless defined $val;
             $mask = $$tagInfo{Mask};
             $val = ($val & $mask) >> $$tagInfo{BitShift} if $mask;
         }
@@ -8837,8 +8876,8 @@ until ($Image::ExifTool::noConfig) {
         $file = $config;
     }
     # also check executable directory unless path is absolute
-    $exePath = $^X unless defined $exePath; # (undocumented $exePath setting)
-    -r $file or $config =~ /^\// or $file = ($exePath =~ /(.*[\\\/])/ ? $1 : './') . $config;
+    $exeDir = ($0 =~ /(.*)[\\\/]/) ? $1 : '.' unless defined $exeDir;
+    -r $file or $config =~ /^\// or $file = "$exeDir/$config";
     unless (-r $file) {
         warn("Config file not found\n") if defined $Image::ExifTool::configFile;
         last;
