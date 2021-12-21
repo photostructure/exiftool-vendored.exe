@@ -36,19 +36,6 @@ cp -rp ../exiftool/* bin/exiftool_files
 rm bin/exiftool_files/exiftool
 mv bin/exiftool_files/windows_exiftool bin/exiftool_files/exiftool.pl
 
-# Apply Oliver's patch. Built with `git diff -up`
-patch bin/exiftool_files/lib/Image/ExifTool.pm << 'EOF'
-@@ -8519,7 +8519,7 @@ until ($Image::ExifTool::noConfig) {
-         $file = $config;
-     }
-     # also check executable directory unless path is absolute
--    $exePath = $0 unless defined $exePath; # (undocumented $exePath setting)
-+    $exePath = $^X unless defined $exePath; # (undocumented $exePath setting)
-     -r $file or $config =~ /^\// or $file = ($exePath =~ /(.*[\\\/])/ ? $1 : './') . $config;
-     unless (-r $file) {
-         warn("Config file not found\n") if defined $Image::ExifTool::configFile;
-EOF
-
 # exiftool never has a patch version:
 NEWVER=$(../exiftool/exiftool -ver).0-pre
 
