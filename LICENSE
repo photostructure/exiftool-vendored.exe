@@ -1,3 +1,10 @@
+# Vendored ExifTool source
+
+This is free software; you can redistribute it and/or modify it under the same
+terms as Perl itself: <https://dev.perl.org/licenses/>
+
+---
+
 # npm packaging of exiftool-vendored.exe
 
 Copyright (c) 2016-2022 Matthew McEachen
