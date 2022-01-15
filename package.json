@@ -1,6 +1,6 @@
 {
   "name": "exiftool-vendored.exe",
-  "version": "12.38.0",
+  "version": "12.39.0-pre",
   "description": "Vendored win32 ExifTool for Node.js",
   "main": "./index.js",
   "homepage": "https://github.com/mceachen/exiftool-vendored.exe#readme",
@@ -30,7 +30,7 @@
     "update": "bash -c ./update.sh"
   },
   "devDependencies": {
-    "mocha": "^9.1.3",
+    "mocha": "^9.1.4",
     "prettier": "^2.5.1"
   }
 }
