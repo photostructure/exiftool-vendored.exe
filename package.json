@@ -29,8 +29,19 @@
     "test": "mocha",
     "update": "bash -c ./update.sh"
   },
+  "release-it": {
+    "hooks": {
+      "before:init": [
+        "yarn install",
+        "yarn test"
+      ]
+    },
+    "github": {
+      "release": true
+    }
+  },
   "devDependencies": {
-    "mocha": "^9.1.4",
-    "prettier": "^2.5.1"
+    "mocha": "^9.2.2",
+    "prettier": "^2.6.2"
   }
 }
