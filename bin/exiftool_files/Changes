@@ -7,6 +7,87 @@ RSS feed: https://exiftool.org/rss.xml
 Note: The most recent production release is Version 12.42. (Other versions are
 considered development releases, and are not uploaded to MetaCPAN.)
 
+Oct. 19, 2022 - Version 12.49
+
+  - Added read support for Windows ICO and CUR files
+  - Added ability to shift EXIF OffsetTime tags (eg. "-OffsetTime+=+02:00")
+  - Added a few new XMP tags and print conversions
+  - Added a print conversion for Photoshop:PrintFlags
+  - Added a new SonyModelID (thanks LibRaw)
+  - Added a few new Canon RF LensType values (thanks Norbert Wasser)
+  - Added a new Canon LensType
+  - Added a new Nikon LensID
+  - Decode 'riff' metadata blocks in FLAC audio files
+  - Decode RIFF 'acid' chunk written by Acidizer
+  - Enhanced the -d option %f sub-second date/time format code to allow the
+    decimal point to be dropped (eg. "%-3f")
+  - Patched another Sigma Photo Pro incompatibility when writing X3F images
+    (Sigma will also fix this at their end in the next SPP release)
+
+Oct. 13, 2022 - Version 12.48
+
+  - Added support for new XMP-photoshop:CameraProfiles structure
+  - Added a new SonyModelID and Sony LensType (thanks Jos Roost)
+  - Decode more tags for the Sony ILME-FX30 (thanks Jos Roost)
+  - Decode a couple of new Panasonic tags, and improved decoding of others
+  - Decode STANAG-4609 MISB timed metadata from M2TS videos
+  - Decode a new Nikon tag (thanks Warren Hatch)
+  - Decode a couple of new FujiFilm tags (thanks Honza Pokorny)
+  - Improved round-off errors when writing QuickTime:MatrixStructure via the
+    Composite:Rotation tag
+  - Increased Verbose level of "nothing changed" message added in 12.45
+  - Removed "Z" (Zulu) designation from some of the MS-DOC date/time tags
+    because they most certainly are in local time as written by Word 2011 for
+    Mac (while some other MS-DOC and FlashPix date/time tags extracted without a
+    "Z" are actually in Zulu time -- a bit of a mess really)
+  - Prevent dynamically-generated Unknown tags from being extracted when the
+    -validate option is used without -u
+  - Patched to better handle irregular timestamps in streaming GPS of NextBase
+    dashcam videos
+  - Fixed incompatibility with Sigma Photo Pro which could result in Sigma Photo
+    Pro corrupting an ExifTool-edited X3F image (the section length in the
+    footer needed to include the padding to a 4-byte boundary, thanks Sigma
+    engineer Yuki Miyahara)
+  - Fixed problem which could prevent ExifTool from reading all GPS points from
+    some INNOV M2TS videos
+
+Oct. 3, 2022 - Version 12.47
+
+  - Added a new Nikon LensID (thanks David Puschel)
+  - Fixed bug introduced in 12.46 which resulted in a runtime error when -j was
+    combined with -b
+
+Oct. 1, 2022 - Version 12.46 - "Write WEBP"
+
+  - Added WEBP write support
+  - Added the abilty to write Panasonic GH6 RW2 files
+  - Added a new Canon LensType
+  - Added a number of new Sigma LensType values (thanks LibRaw)
+  - Added support for BigTIFF format code 16 in Apple ProRaw maker notes
+  - Added config_files/frameCount.config to extract MP4 FrameCount
+  - Added a MIE OriginalImageSize tag
+  - Added some extra -validate checks for RIFF-based file formats
+  - Extract FrameRate from MP4 tmcd box
+  - Decode a new Apple tag (thanks Neal Krawetz)
+  - Decode more information from Nikon Z-camera videos
+  - Decode streaming GPS from Garmin DriveAssist 51 MP4 videos
+  - Changed the names of two FujiFilm FirmwareVersion tags
+  - Enhanced WEBP FileType identification to denote Extended WEBP
+  - Preserve fractional seconds when extracting Samsung TimeStamp times
+  - Patched to avoid reporting Photoshop:ProgressiveScans unless PhotoshopFormat
+    is Progressive
+  - Patched to test QuickTime UserData tags with default 0x0000 language code to
+    see if they contain UTF8 characters, and if so assume UTF8 encoding and
+    ignore the CharsetQuickTime setting
+  - Patched to avoid potential deep recursion when reading/writing malicious CRW
+    images
+  - Fixed "Invalid ID3 frame size" problem when reading ID3v2 with an extended
+    header (very uncommon, but Audacity uses this)
+  - Fixed typo in the name of a new DNG 1.6 tag
+  - Fixed some verbose warnings when reading Nikon Z-camera NEF files
+  - Fixed decoding of a couple of Nikon Z9 tags for newer firmware versions
+    (thanks Warren Hatch)
+
 Sept. 16, 2022 - Version 12.45
 
   - Added new IPTC Video Metadata version 1.3 tags
@@ -304,6 +385,8 @@ Aug. 12, 2021 - Version 12.30 (production release)
     currently can't be created)
   - Patched to remove 2 GB size limit when reading Photoshop ImageSourceData
 
+History of older versions (back to Nov. 19, 2003 - Version 1.00) -->
+
 July 9, 2021 - Version 12.29
 
   - Added a few new Nikon and Olympus lenses (thanks LibRaw)
@@ -357,8 +440,6 @@ May 20, 2021 - Version 12.26 (production release)
   - Patched security vulnerability in argument of -lang option
   - Fixed problem which could cause a "Wide character" warning and generate a
     corrupted output file when writing some illegal values
-
-History of older versions (back to Nov. 19, 2003 - Version 1.00) -->
 
 Apr. 22, 2021 - Version 12.25
 
@@ -675,7 +756,7 @@ Aug. 10, 2020 - Version 12.04
   - Moved new QuckTime ItemList tags added in version 12.02 to the proper group
     (they were incorrectly added to the Keys group)
   - Improved QuickTime -v3 output to show default language codes
-  - Patched -lang option to work for the values of somet tags with coded
+  - Patched -lang option to work for the values of some tags with coded
     translations
   - Patched the format of a number of QuickTime tags when writing for improved
     compatibility with iTunes and AtomicParsley

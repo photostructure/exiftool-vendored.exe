@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '12.45';
+my $version = '12.49';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -3252,7 +3252,7 @@ sub EncodeXML($)
 {
     my $strPt = shift;
     if ($$strPt =~ /[\0-\x08\x0b\x0c\x0e-\x1f]/ or
-        (not $altEnc and Image::ExifTool::XMP::IsUTF8($strPt) < 0))
+        (not $altEnc and Image::ExifTool::IsUTF8($strPt) < 0))
     {
         # encode binary data and non-UTF8 with special characters as base64
         $$strPt = Image::ExifTool::XMP::EncodeBase64($$strPt);
@@ -3316,7 +3316,7 @@ sub EscapeJSON($;$)
         return $str if $str =~ /^-?(\d|[1-9]\d{1,14})(\.\d{1,16})?(e[-+]?\d{1,3})?$/i;
     }
     # encode JSON string in base64 if necessary
-    if ($json < 2 and defined $binaryOutput and Image::ExifTool::XMP::IsUTF8(\$str) < 0) {
+    if ($json < 2 and defined $binaryOutput and Image::ExifTool::IsUTF8(\$str) < 0) {
         return '"base64:' . Image::ExifTool::XMP::EncodeBase64($str, 1) . '"';
     }
     # escape special characters
@@ -3392,7 +3392,7 @@ sub FormatCSV($)
     my $val = shift;
     # check for valid encoding if the Charset option was used
     if ($setCharset and ($val =~ /[^\x09\x0a\x0d\x20-\x7e\x80-\xff]/ or
-        ($setCharset eq 'UTF8' and Image::ExifTool::XMP::IsUTF8(\$val) < 0)))
+        ($setCharset eq 'UTF8' and Image::ExifTool::IsUTF8(\$val) < 0)))
     {
         $val = 'base64:' . Image::ExifTool::XMP::EncodeBase64($val, 1);
     }
@@ -3479,7 +3479,7 @@ sub ConvertBinary($)
             $obj = $$obj;
             # encode in base64 if necessary (0xf7 allows for up to 21-bit UTF-8 code space)
             if ($json == 1 and ($obj =~ /[^\x09\x0a\x0d\x20-\x7e\x80-\xf7]/ or
-                                Image::ExifTool::XMP::IsUTF8(\$obj) < 0))
+                                Image::ExifTool::IsUTF8(\$obj) < 0))
             {
                 $obj = 'base64:' . Image::ExifTool::XMP::EncodeBase64($obj, 1);
             }
@@ -3613,8 +3613,7 @@ sub CheckUTF8($$)
     my ($file, $enc) = @_;
     my $isUTF8 = 0;
     if ($file =~ /[\x80-\xff]/) {
-        require Image::ExifTool::XMP;
-        $isUTF8 = Image::ExifTool::XMP::IsUTF8(\$file);
+        $isUTF8 = Image::ExifTool::IsUTF8(\$file);
         if ($isUTF8 < 0) {
             if ($enc) {
                 Warn("Invalid filename encoding for $file\n");
@@ -4538,48 +4537,48 @@ DESCRIPTION
 
       File Types
       ------------+-------------+-------------+-------------+------------
-      360   r/w   | DR4   r/w/c | JNG   r/w   | O     r     | RAW   r/w
-      3FR   r     | DSS   r     | JP2   r/w   | ODP   r     | RIFF  r
-      3G2   r/w   | DV    r     | JPEG  r/w   | ODS   r     | RSRC  r
-      3GP   r/w   | DVB   r/w   | JSON  r     | ODT   r     | RTF   r
-      A     r     | DVR-MS r    | JXL   r     | OFR   r     | RW2   r/w
-      AA    r     | DYLIB r     | K25   r     | OGG   r     | RWL   r/w
-      AAE   r     | EIP   r     | KDC   r     | OGV   r     | RWZ   r
-      AAX   r/w   | EPS   r/w   | KEY   r     | ONP   r     | RM    r
-      ACR   r     | EPUB  r     | LA    r     | OPUS  r     | SEQ   r
-      AFM   r     | ERF   r/w   | LFP   r     | ORF   r/w   | SKETCH r
-      AI    r/w   | EXE   r     | LIF   r     | ORI   r/w   | SO    r
-      AIFF  r     | EXIF  r/w/c | LNK   r     | OTF   r     | SR2   r/w
-      APE   r     | EXR   r     | LRV   r/w   | PAC   r     | SRF   r
-      ARQ   r/w   | EXV   r/w/c | M2TS  r     | PAGES r     | SRW   r/w
-      ARW   r/w   | F4A/V r/w   | M4A/V r/w   | PBM   r/w   | SVG   r
-      ASF   r     | FFF   r/w   | MACOS r     | PCD   r     | SWF   r
-      AVI   r     | FITS  r     | MAX   r     | PCX   r     | THM   r/w
-      AVIF  r/w   | FLA   r     | MEF   r/w   | PDB   r     | TIFF  r/w
-      AZW   r     | FLAC  r     | MIE   r/w/  | PDF   r/w   | TORRENT r
-      BMP   r     | FLIF  r/w   | MIFF  r   c | PEF   r/w   | TTC   r
-      BPG   r     | FLV   r     | MKA   r     | PFA   r     | TTF   r
-      BTF   r     | FPF   r     | MKS   r     | PFB   r     | TXT   r
-      CHM   r     | FPX   r     | MKV   r     | PFM   r     | VCF   r
-      COS   r     | GIF   r/w   | MNG   r/w   | PGF   r     | VRD   r/w/c
-      CR2   r/w   | GPR   r/w   | MOBI  r     | PGM   r/w   | VSD   r
-      CR3   r/w   | GZ    r     | MODD  r     | PLIST r     | WAV   r
-      CRM   r/w   | HDP   r/w   | MOI   r     | PICT  r     | WDP   r/w
-      CRW   r/w   | HDR   r     | MOS   r/w   | PMP   r     | WEBP  r
-      CS1   r/w   | HEIC  r/w   | MOV   r/w   | PNG   r/w   | WEBM  r
-      CSV   r     | HEIF  r/w   | MP3   r     | PPM   r/w   | WMA   r
-      CZI   r     | HTML  r     | MP4   r/w   | PPT   r     | WMV   r
-      DCM   r     | ICC   r/w/c | MPC   r     | PPTX  r     | WTV   r
-      DCP   r/w   | ICS   r     | MPG   r     | PS    r/w   | WV    r
-      DCR   r     | IDML  r     | MPO   r/w   | PSB   r/w   | X3F   r/w
-      DFONT r     | IIQ   r/w   | MQV   r/w   | PSD   r/w   | XCF   r
-      DIVX  r     | IND   r/w   | MRC   r     | PSP   r     | XLS   r
-      DJVU  r     | INSP  r/w   | MRW   r/w   | QTIF  r/w   | XLSX  r
-      DLL   r     | INSV  r     | MXF   r     | R3D   r     | XMP   r/w/c
-      DNG   r/w   | INX   r     | NEF   r/w   | RA    r     | ZIP   r
-      DOC   r     | ISO   r     | NKSC  r/w   | RAF   r/w   |
-      DOCX  r     | ITC   r     | NRW   r/w   | RAM   r     |
-      DPX   r     | J2C   r     | NUMBERS r   | RAR   r     |
+      360   r/w   | DPX   r     | ITC   r     | NRW   r/w   | RAM   r
+      3FR   r     | DR4   r/w/c | J2C   r     | NUMBERS r   | RAR   r
+      3G2   r/w   | DSS   r     | JNG   r/w   | O     r     | RAW   r/w
+      3GP   r/w   | DV    r     | JP2   r/w   | ODP   r     | RIFF  r
+      A     r     | DVB   r/w   | JPEG  r/w   | ODS   r     | RSRC  r
+      AA    r     | DVR-MS r    | JSON  r     | ODT   r     | RTF   r
+      AAE   r     | DYLIB r     | JXL   r     | OFR   r     | RW2   r/w
+      AAX   r/w   | EIP   r     | K25   r     | OGG   r     | RWL   r/w
+      ACR   r     | EPS   r/w   | KDC   r     | OGV   r     | RWZ   r
+      AFM   r     | EPUB  r     | KEY   r     | ONP   r     | RM    r
+      AI    r/w   | ERF   r/w   | LA    r     | OPUS  r     | SEQ   r
+      AIFF  r     | EXE   r     | LFP   r     | ORF   r/w   | SKETCH r
+      APE   r     | EXIF  r/w/c | LIF   r     | ORI   r/w   | SO    r
+      ARQ   r/w   | EXR   r     | LNK   r     | OTF   r     | SR2   r/w
+      ARW   r/w   | EXV   r/w/c | LRV   r/w   | PAC   r     | SRF   r
+      ASF   r     | F4A/V r/w   | M2TS  r     | PAGES r     | SRW   r/w
+      AVI   r     | FFF   r/w   | M4A/V r/w   | PBM   r/w   | SVG   r
+      AVIF  r/w   | FITS  r     | MACOS r     | PCD   r     | SWF   r
+      AZW   r     | FLA   r     | MAX   r     | PCX   r     | THM   r/w
+      BMP   r     | FLAC  r     | MEF   r/w   | PDB   r     | TIFF  r/w
+      BPG   r     | FLIF  r/w   | MIE   r/w/c | PDF   r/w   | TORRENT r
+      BTF   r     | FLV   r     | MIFF  r     | PEF   r/w   | TTC   r
+      CHM   r     | FPF   r     | MKA   r     | PFA   r     | TTF   r
+      COS   r     | FPX   r     | MKS   r     | PFB   r     | TXT   r
+      CR2   r/w   | GIF   r/w   | MKV   r     | PFM   r     | VCF   r
+      CR3   r/w   | GPR   r/w   | MNG   r/w   | PGF   r     | VRD   r/w/c
+      CRM   r/w   | GZ    r     | MOBI  r     | PGM   r/w   | VSD   r
+      CRW   r/w   | HDP   r/w   | MODD  r     | PLIST r     | WAV   r
+      CS1   r/w   | HDR   r     | MOI   r     | PICT  r     | WDP   r/w
+      CSV   r     | HEIC  r/w   | MOS   r/w   | PMP   r     | WEBP  r/w
+      CUR   r     | HEIF  r/w   | MOV   r/w   | PNG   r/w   | WEBM  r
+      CZI   r     | HTML  r     | MP3   r     | PPM   r/w   | WMA   r
+      DCM   r     | ICC   r/w/c | MP4   r/w   | PPT   r     | WMV   r
+      DCP   r/w   | ICO   r     | MPC   r     | PPTX  r     | WTV   r
+      DCR   r     | ICS   r     | MPG   r     | PS    r/w   | WV    r
+      DFONT r     | IDML  r     | MPO   r/w   | PSB   r/w   | X3F   r/w
+      DIVX  r     | IIQ   r/w   | MQV   r/w   | PSD   r/w   | XCF   r
+      DJVU  r     | IND   r/w   | MRC   r     | PSP   r     | XLS   r
+      DLL   r     | INSP  r/w   | MRW   r/w   | QTIF  r/w   | XLSX  r
+      DNG   r/w   | INSV  r     | MXF   r     | R3D   r     | XMP   r/w/c
+      DOC   r     | INX   r     | NEF   r/w   | RA    r     | ZIP   r
+      DOCX  r     | ISO   r     | NKSC  r/w   | RAF   r/w   |
 
       Meta Information
       ----------------------+----------------------+---------------------
@@ -5248,7 +5247,8 @@ OPTIONS
          present. ExifTool adds a %f format code to represent fractional
          seconds, and supports an optional width to specify the number of
          digits after the decimal point (eg. %3f would give something like
-         .437). Only one -d option may be used per command. Requires
+         .437), and a minus sign to drop the decimal point (eg. "%-3f" would
+         give 437). Only one -d option may be used per command. Requires
          POSIX::strptime or Time::Piece for the inversion conversion when
          writing.
 
@@ -5383,7 +5383,7 @@ OPTIONS
          combined with -listx to output descriptions in one language only.
 
          By default, ExifTool uses UTF-8 encoding for special characters,
-         but the the -L or -charset option may be used to invoke other
+         but the -L or -charset option may be used to invoke other
          encodings. Note that ExifTool uses Unicode::LineBreak if available
          to help preserve the column alignment of the plain text output for
          languages with a variable-width character set.
@@ -5494,7 +5494,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.45 --
+             -- Generated by ExifTool 12.49 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -5502,7 +5502,7 @@ OPTIONS
              -- end --
 
          The values of List-type tags with multiple items and Shortcut tags
-         representing multiple tags are joined according the the -sep option
+         representing multiple tags are joined according the -sep option
          setting when interpolated in the string.
 
          When -ee (-extractEmbedded) is combined with -p, embedded documents
@@ -5517,7 +5517,12 @@ OPTIONS
          suppress the warning messages.
 
          The "Advanced formatting feature" may be used to modify the values
-         of individual tags with the -p option.
+         of individual tags within the -p option string.
+
+         Note that the API RequestTags option is automatically set for all
+         tags used in the *FMTFILE* or *STR*. This allows all other tags to
+         be ignored using -API IgnoreTags=all, resulting in reduced memory
+         usage and increased speed.
 
     -php Format output as a PHP Array. The -g, -G, -D, -H, -l, -sep and
          -struct options combine with -php, and duplicate tags are handled
@@ -6008,7 +6013,7 @@ OPTIONS
          alternative is to use the $GROUP:all syntax. (eg. Use $exif:all
          instead of $exif in *EXPR* to test for the existence of EXIF tags.)
 
-         3) Tags in the string are interpolated the same way as with -p
+         3) Tags in the string are interpolated in a similar way to -p
          before the expression is evaluated. In this interpolation, $/ is
          converted to a newline and $$ represents a single "$" symbol. So
          Perl variables, if used, require a double "$", and regular
@@ -6030,6 +6035,9 @@ OPTIONS
          6) A special "OK" UserParam is available to test the success of the
          previous command when -execute was used, and may be used like any
          other tag in the condition (ie. "$OK").
+
+         7) The API RequestTags option is automatically set for all tags
+         used in the -if condition.
 
     -m (-ignoreMinorErrors)
          Ignore minor errors and warnings. This enables writing to files

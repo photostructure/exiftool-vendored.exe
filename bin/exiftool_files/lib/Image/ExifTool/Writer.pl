@@ -115,7 +115,9 @@ my %writableType = (
     PS  => [ 'PostScript',  'WritePS'  ],
     PSD =>   'Photoshop',
     RAF => [ 'FujiFilm',    'WriteRAF' ],
+    RIFF=> [ 'RIFF',        'WriteRIFF'],
     VRD =>   'CanonVRD',
+    WEBP=> [ 'RIFF',        'WriteRIFF'],
     X3F =>   'SigmaRaw',
     XMP => [ undef,         'WriteXMP' ],
 );
@@ -240,7 +242,7 @@ my %intRange = (
     'int64s' => [-9223372036854775808, 9223372036854775807],
 );
 # lookup for file types with block-writable EXIF
-my %blockExifTypes = map { $_ => 1 } qw(JPEG PNG JP2 MIE EXIF FLIF MOV MP4);
+my %blockExifTypes = map { $_ => 1 } qw(JPEG PNG JP2 MIE EXIF FLIF MOV MP4 RIFF);
 
 my $maxSegmentLen = 0xfffd;     # maximum length of data in a JPEG segment
 my $maxXMPLen = $maxSegmentLen; # maximum length of XMP data in JPEG
@@ -4244,7 +4246,9 @@ sub WriteDirectory($$$;$)
     SetByteOrder($saveOrder);
     if ($out) {
         print $out "  Deleting $name\n" if defined $newData and not length $newData;
-        print $out "$$self{INDENT}  [nothing changed in $dirName]\n" if $$self{CHANGED} == $oldChanged;
+        if ($$self{CHANGED} == $oldChanged and $$self{OPTIONS}{Verbose} > 2) {
+            print $out "$$self{INDENT}  [nothing changed in $dirName]\n";
+        }
     }
     return $newData;
 }

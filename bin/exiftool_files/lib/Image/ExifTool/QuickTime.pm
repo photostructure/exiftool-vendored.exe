@@ -47,7 +47,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '2.76';
+$VERSION = '2.79';
 
 sub ProcessMOV($$;$);
 sub ProcessKeys($$$);
@@ -66,6 +66,7 @@ sub ProcessRIFFTrailer($$$);
 sub ProcessTTAD($$$);
 sub ProcessNMEA($$$);
 sub ProcessGPSLog($$$);
+sub ProcessGarminGPS($$$);
 sub SaveMetaKeys($$$);
 # ++^^^^^^^^^^^^++
 sub ParseItemLocation($$);
@@ -1120,6 +1121,23 @@ my %eeBox2 = (
             SubDirectory => {
                 TagTable => 'Image::ExifTool::Canon::uuid',
                 Start => 16,
+            },
+        },
+        {
+            Name => 'GarminGPS',
+            Condition => '$$valPt=~/^\x9b\x63\x0f\x8d\x63\x74\x40\xec\x82\x04\xbc\x5f\xf5\x09\x17\x28/ and $$self{OPTIONS}{ExtractEmbedded}',
+            SubDirectory => {
+                TagTable => 'Image::ExifTool::QuickTime::Stream',
+                ProcessProc => \&ProcessGarminGPS,
+            },
+        },
+        {
+            Name => 'GarminGPS',
+            Condition => '$$valPt=~/^\x9b\x63\x0f\x8d\x63\x74\x40\xec\x82\x04\xbc\x5f\xf5\x09\x17\x28/',
+            Notes => 'Garmin GPS sensor data',
+            RawConv => q{
+                $self->WarnOnce('Use the ExtractEmbedded option to decode timed Garmin GPS',3);
+                return \$val;
             },
         },
         {
@@ -7630,6 +7648,11 @@ my %eeBox2 = (
         Format => 'undef[4]',
         RawConv => '$$self{MetaFormat} = $val', # (yes, use MetaFormat for this too)
     },
+    24 => {
+        Condition => '$$self{MetaFormat} eq "tmcd"',
+        Name => 'PlaybackFrameRate', # (may differ from recorded FrameRate eg. ../pics/FujiFilmX-H1.mov)
+        Format => 'rational64u',
+    },
 #
 # Observed offsets for child atoms of various OtherFormat types:
 #
@@ -8082,9 +8105,12 @@ sub AUTOLOAD
 # Returns: 9-element rotation matrix as a string (with 0 x/y offsets)
 sub GetRotationMatrix($)
 {
-    my $ang = 3.1415926536 * shift() / 180;
+    my $ang = 3.14159265358979323846264 * shift() / 180;
     my $cos = cos $ang;
     my $sin = sin $ang;
+    # round to zero
+    $cos = 0 if abs($cos) < 1e-12;
+    $sin = 0 if abs($sin) < 1e-12;
     my $msn = -$sin;
     return "$cos $sin 0 $msn $cos 0 0 0 1";
 }
@@ -9637,10 +9663,14 @@ ItemID:         foreach $id (keys %$items) {
                                     require Image::ExifTool::Font;
                                     $lang = $Image::ExifTool::Font::ttLang{Macintosh}{$lang};
                                 }
+                            } else {
+                                # for the default language code of 0x0000, use UTF-8 instead
+                                # of the CharsetQuickTime setting if obviously UTF8
+                                $enc = 'UTF8' if Image::ExifTool::IsUTF8(\$str) > 0;
                             }
                             # the spec says only "Macintosh text encoding", but
                             # allow this to be configured by the user
-                            $enc = $charsetQuickTime;
+                            $enc = $charsetQuickTime unless $enc;
                         } else {
                             # convert language code to ASCII (ignore read-only bit)
                             $lang = UnpackLang($lang);
@@ -9681,8 +9711,7 @@ ItemID:         foreach $id (keys %$items) {
                         if (not ref $$vp and length($$vp) <= 65536 and $$vp =~ /[\x80-\xff]/) {
                             # the encoding of this is not specified, so use CharsetQuickTime
                             # unless the string is valid UTF-8
-                            require Image::ExifTool::XMP;
-                            my $enc = Image::ExifTool::XMP::IsUTF8($vp) > 0 ? 'UTF8' : $charsetQuickTime;
+                            my $enc = Image::ExifTool::IsUTF8($vp) > 0 ? 'UTF8' : $charsetQuickTime;
                             $$vp = $et->Decode($$vp, $enc);
                         }
                     }
