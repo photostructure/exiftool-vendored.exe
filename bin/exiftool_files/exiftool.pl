@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '12.56';
+my $version = '12.60';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -69,6 +69,7 @@ sub AcceptFile($);
 sub SlurpFile($$);
 sub FilterArgfileLine($);
 sub ReadStayOpen($);
+sub Progress($$);
 sub PrintTagList($@);
 sub PrintErrors($$$);
 sub Help();
@@ -95,6 +96,7 @@ my @newValues;      # list of new tag values to set
 my @requestTags;    # tags to request (for -p or -if option arguments)
 my @srcFmt;         # source file name format strings
 my @tags;           # list of tags to extract
+my %altFile;        # alternate files to extract information (keyed by lower-case family 8 group)
 my %appended;       # list of files appended to
 my %countLink;      # count hard and symbolic links made
 my %created;        # list of files we created
@@ -107,6 +109,7 @@ my %outComma;       # flag that output text file needs a comma
 my %outTrailer;     # trailer for output text file
 my %preserveTime;   # preserved timestamps for files
 my %printFmt;       # the contents of the print format file
+my %seqFileDir;     # file sequence number in each directory
 my %setTags;        # hash of list references for tags to set from files
 my %setTagsList;    # list of other tag lists for multiple -tagsFromFile from the same file
 my %usedFileName;   # lookup for file names we already used in TestName feature
@@ -175,7 +178,9 @@ my $pause;          # pause before returning
 my $preserveTime;   # flag to preserve times of updated files (2=preserve FileCreateDate only)
 my $progress;       # flag to calculate total files to process (0=calculate but don't display)
 my $progressCount;  # count of files processed
+my $progressIncr;   # increment for progress counter
 my $progressMax;    # total number of files to process
+my $progressNext;   # next progress count to output
 my $progStr;        # progress message string
 my $quiet;          # flag to disable printing of informational messages / warnings
 my $rafStdin;       # File::RandomAccess for stdin (if necessary to rewind)
@@ -186,7 +191,7 @@ my $saveCount;      # count the number of times we will/did call SaveNewValues()
 my $scanWritable;   # flag to process only writable file types
 my $sectHeader;     # current section header for -p option
 my $sectTrailer;    # section trailer for -p option
-my $seqFileBase;    # sequential file number at start of directory
+my $seqFileDir;     # sequential file number used for %-C
 my $seqFileNum;     # sequential file number used for %C
 my $setCharset;     # character set setting ('default' if not set and -csv -b used)
 my $showGroup;      # number of group to show (may be zero or '')
@@ -204,6 +209,7 @@ my $validFile;      # flag indicating we processed a valid file
 my $verbose;        # verbose setting
 my $vout;           # verbose output file reference (\*STDOUT or \*STDERR)
 my $windowTitle;    # title for console window
+my %wroteHEAD;      # list of output txt files to which we wrote HEAD
 my $xml;            # flag for XML-formatted output
 
 # flag to keep the input -@ argfile open:
@@ -244,17 +250,15 @@ my %optArgs = (
     '-csvdelim' => 1,
     '-d' => 1, '-dateformat' => 1,
     '-D' => 0, # necessary to avoid matching lower-case equivalent
-    '-echo' => 1, '-echo1' => 1, '-echo2' => 1, '-echo3' => 1, '-echo4' => 1,
-    '-efile' => 1, '-efile1' => 1, '-efile2' => 1, '-efile3' => 1, '-efile4' => 1,
-    '-efile!' => 1, '-efile1!' => 1, '-efile2!' => 1, '-efile3!' => 1, '-efile4!' => 1,
+    '-echo' => 1, '-echo#' => 1,
+    '-efile' => 1, '-efile#' => 1, '-efile!' => 1, '-efile#!' => 1,
     '-ext' => 1, '--ext' => 1, '-ext+' => 1, '--ext+' => 1,
         '-extension' => 1, '--extension' => 1, '-extension+' => 1, '--extension+' => 1,
-    '-fileorder' => 1, '-fileorder0' => 1, '-fileorder1' => 1, '-fileorder2' => 1,
-        '-fileorder3' => 1, '-fileorder4' => 1, '-fileorder5' => 1,
+    '-fileorder' => 1, '-fileorder#' => 1,
     '-geotag' => 1,
     '-globaltimeshift' => 1,
     '-i' => 1, '-ignore' => 1,
-    '-if' => 1, '-if0' => 1, '-if1' => 1, '-if2' => 1, '-if3' => 1, '-if4' => 1, '-if5' => 1,
+    '-if' => 1, '-if#' => 1,
     '-lang' => 0, # (optional arg; cannot begin with "-")
     '-listitem' => 1,
     '-o' => 1, '-out' => 1,
@@ -462,6 +466,7 @@ undef %outComma;
 undef %outTrailer;
 undef %printFmt;
 undef %preserveTime;
+undef %seqFileDir;
 undef %setTags;
 undef %setTagsList;
 undef %usedFileName;
@@ -503,7 +508,9 @@ undef $outOpt;
 undef $preserveTime;
 undef $progress;
 undef $progressCount;
+undef $progressIncr;
 undef $progressMax;
+undef $progressNext;
 undef $recurse;
 undef $scanWritable;
 undef $sectHeader;
@@ -546,7 +553,7 @@ $quiet = 0;
 $rtnVal = 0;
 $saveCount = 0;
 $sectTrailer = '';
-$seqFileBase = 0;
+$seqFileDir = 0;
 $seqFileNum = 0;
 $tabFormat = 0;
 $vout = \*STDOUT;
@@ -929,12 +936,14 @@ for (;;) {
         $mt->Options(Duplicates => 1);
         next;
     }
-    if (/^efile(\d)?(!)?$/i) {
+    if (/^efile(\d+)?(!)?$/i) {
         my $arg = shift;
         defined $arg or Error("Expecting file name for -$_ option\n"), $badCmd=1, next;
-        $efile[0] = $arg if not $1 or $1 & 0x01;
-        $efile[1] = $arg if $1 and $1 & 0x02;
-        $efile[2] = $arg if $1 and $1 & 0x04;
+        $efile[0] = $arg if not $1 or $1 & 0x01;# error
+        $efile[1] = $arg if $1 and $1 & 0x02;   # unchanged
+        $efile[2] = $arg if $1 and $1 & 0x04;   # failed -if condition
+        $efile[3] = $arg if $1 and $1 & 0x08;   # updated
+        $efile[4] = $arg if $1 and $1 & 0x016;  # created
         unlink $arg if $2;
         next;
     }
@@ -958,6 +967,10 @@ for (;;) {
     }
     if (/^fast(\d*)$/i) {
         $mt->Options(FastScan => (length $1 ? $1 : 1));
+        next;
+    }
+    if (/^(file\d+)$/i) {
+        $altFile{lc $1} = shift or Error("Expecting file name for -file option\n"), $badCmd=1, next;
         next;
     }
     if (/^fileorder(\d*)$/i) {
@@ -1133,9 +1146,11 @@ for (;;) {
     }
     (/^P$/ or $a eq 'preserve') and $preserveTime = 1, next;
     /^password$/i and $mt->Options(Password => shift), next;
-    if (/^progress(:.*)?$/i) {
-        if ($1) {
-            $windowTitle = substr $1, 1;
+    if (/^progress(\d*)(:.*)?$/i) {
+        $progressIncr = $1 || 1;
+        $progressNext = 0; # start showing progress at the first file
+        if ($2) {
+            $windowTitle = substr $2, 1;
             $windowTitle = 'ExifTool %p%%' unless length $windowTitle;
             $windowTitle =~ /%\d*[bpr]/ and $progress = 0 unless defined $progress;
         } else {
@@ -1253,7 +1268,8 @@ for (;;) {
         next;
     }
     if (/^(w|textout|tagout)([!+]*)$/i) {
-        $textOut = shift || Warn("Expecting output extension for -$_ option\n");
+        # (note: all logic ignores $textOut of 0 or '')
+        $textOut = shift || Warn("Expecting argument for -$_ option\n");
         my ($t1, $t2) = ($1, $2);
         $textOverwrite = 0;
         $textOverwrite += 1 if $t2 =~ /!/;  # overwrite
@@ -1337,7 +1353,7 @@ for (;;) {
         AddSetTagsFile($setTagsFile = '@') if not $setTagsFile and /(<|>)/;
         if ($setTagsFile) {
             push @{$setTags{$setTagsFile}}, $_;
-            if (/>/) {
+            if ($1 eq '>') {
                 $useMWG = 1 if /^(.*>\s*)?mwg:/si;
                 if (/\b(filename|directory|testname)#?$/i) {
                     $doSetFileName = 1;
@@ -1709,7 +1725,7 @@ if (defined $showGroup and not (@tags and $allGroup) and ($sortOpt or not define
     $mt->Options(Sort => "Group$showGroup");
 }
 
-if (defined $textOut) {
+if ($textOut) {
     CleanFilename($textOut);  # make all forward slashes
     # add '.' before output extension if necessary
     $textOut = ".$textOut" unless $textOut =~ /[.%]/ or defined $tagOut;
@@ -1930,10 +1946,10 @@ Exit $rtnValApp;    # all done
 sub GetImageInfo($$)
 {
     my ($et, $orig) = @_;
-    my (@foundTags, $info, $file, $ind);
+    my (@foundTags, $info, $file, $ind, $g8);
 
     # set window title for this file if necessary
-    if (defined $windowTitle) {
+    if (defined $windowTitle and $progressCount >= $progressNext) {
         my $prog = $progressMax ? "$progressCount/$progressMax" : '0/0';
         my $title = $windowTitle;
         my ($num, $denom) = split '/', $prog;
@@ -1949,6 +1965,7 @@ sub GetImageInfo($$)
         );
         $title =~ s/%([%bfpr])/$lkup{$1}/eg;
         SetWindowTitle($title);
+        undef $progressNext;
     }
     unless (length $orig or $outOpt) {
         Warn qq(Error: Zero-length file name - ""\n);
@@ -1971,6 +1988,11 @@ sub GetImageInfo($$)
         $et->Options(UserParam => "OriginalFileName#=$f");
     } else {
         $file = $orig;
+    }
+    # set alternate file names
+    foreach $g8 (sort keys %altFile) {
+        my $altName = FilenameSPrintf($altFile{$g8}, $orig);
+        $et->SetAlternateFile($g8, $altName);
     }
 
     my $pipe = $file;
@@ -2042,7 +2064,7 @@ sub GetImageInfo($$)
             undef @foundTags if $fastCondition; # ignore if we didn't get all tags
         }
         unless ($result) {
-            $verbose and print $vout "-------- $file (failed condition)$progStr\n";
+            Progress($vout, "-------- $file (failed condition)") if $verbose;
             EFile($file, 2);
             ++$countFailed;
             return;
@@ -2052,7 +2074,7 @@ sub GetImageInfo($$)
         undef $info if $verbose or defined $fastCondition;
     }
     if (defined $deleteOrig) {
-        print $vout "======== $file$progStr\n" if defined $verbose;
+        Progress($vout, "======== $file") if defined $verbose;
         ++$count;
         my $original = "${file}_original";
         $et->Exists($original) or return;
@@ -2061,6 +2083,7 @@ sub GetImageInfo($$)
             push @delFiles, $original;
         } elsif ($et->Rename($original, $file)) {
             $verbose and print $vout "Restored from $original\n";
+            EFile($file, 3);
             ++$countGoodWr;
         } else {
             Warn "Error renaming $original\n";
@@ -2070,6 +2093,8 @@ sub GetImageInfo($$)
         return;
     }
     ++$seqFileNum;  # increment our file counter
+    my ($dir) = Image::ExifTool::SplitFileName($orig);
+    $seqFileDir = $seqFileDir{$dir} = ($seqFileDir{$dir} || 0) + 1;
 
     my $lineCount = 0;
     my ($fp, $outfile, $append);
@@ -2082,12 +2107,12 @@ sub GetImageInfo($$)
     }
 
     if ($isWriting) {
-        print $vout "======== $file$progStr\n" if defined $verbose;
+        Progress($vout, "======== $file") if defined $verbose;
         SetImageInfo($et, $file, $orig);
         $info = $et->GetInfo('Warning', 'Error');
         PrintErrors($et, $info, $file);
         # close output text file if necessary
-        if ($outfile) {
+        if (defined $outfile) {
             undef $tmpText;
             close($fp);
             $et->Options(TextOut => $vout);
@@ -2106,7 +2131,7 @@ sub GetImageInfo($$)
     unless ($file eq '-' or $et->Exists($file)) {
         Warn "Error: File not found - $file\n";
         FileNotFound($file);
-        $outfile and close($fp), undef($tmpText), $et->Unlink($outfile);
+        defined $outfile and close($fp), undef($tmpText), $et->Unlink($outfile);
         EFile($file);
         ++$countBad;
         return;
@@ -2123,7 +2148,7 @@ sub GetImageInfo($$)
         }
     }
     $o = \*STDERR if $progress and not $o;
-    $o and print $o "======== $file$progStr\n";
+    Progress($o, "======== $file") if $o;
     if ($info) {
         # get the information we wanted
         if (@tags and not %printFmt) {
@@ -2145,7 +2170,7 @@ sub GetImageInfo($$)
     }
     # all done now if we already wrote output text file (eg. verbose option)
     if ($fp) {
-        if ($outfile) {
+        if (defined $outfile) {
             $et->Options(TextOut => \*STDOUT);
             undef $tmpText;
             if ($info->{Error}) {
@@ -2174,7 +2199,7 @@ sub GetImageInfo($$)
     }
 
     # open output file (or stdout if no output file) if not done already
-    unless ($outfile or $tagOut) {
+    unless (defined $outfile or $tagOut) {
         ($fp, $outfile, $append) = OpenOutputFile($orig);
         $fp or EFile($file), ++$countBad, return;
         $tmpText = $outfile unless $append;
@@ -2199,6 +2224,10 @@ sub GetImageInfo($$)
             my $skipBody;
             foreach $type (qw(HEAD SECT IF BODY ENDS TAIL)) {
                 my $prf = $printFmt{$type} or next;
+                if ($type eq 'HEAD' and defined $outfile) {
+                    next if $wroteHEAD{$outfile};
+                    $wroteHEAD{$outfile} = 1;
+                }
                 next if $type eq 'BODY' and $skipBody;
                 if ($lastDoc) {
                     if ($doc) {
@@ -2236,7 +2265,7 @@ sub GetImageInfo($$)
                 }
             }
         }
-        delete $printFmt{HEAD} unless $outfile; # print header only once per output file
+        delete $printFmt{HEAD} unless defined $outfile; # print header only once per output file
         my $errs = $et->GetInfo('Warning', 'Error');
         PrintErrors($et, $errs, $file) and EFile($file);
     } elsif (not $disableOutput) {
@@ -2392,7 +2421,7 @@ TAG:    foreach $tag (@foundTags) {
                         next TAG;
                     }
                     my @groups = $et->GetGroup($tag);
-                    $outfile and close($fp), undef($tmpText); # (shouldn't happen)
+                    defined $outfile and close($fp), undef($tmpText); # (shouldn't happen)
                     my $org = $et->GetValue('OriginalRawFileName') || $et->GetValue('OriginalFileName');
                     ($fp, $outfile, $append) = OpenOutputFile($orig, $tagName, \@groups, $ext, $org);
                     $fp or ++$countBad, next TAG;
@@ -2698,7 +2727,7 @@ TAG:    foreach $tag (@foundTags) {
             }
         }
     }
-    if ($outfile) {
+    if (defined $outfile) {
         if ($textOverwrite & 0x02) {
             # save state of this file if we may be appending
             $outComma{$outfile} = $comma;
@@ -3014,6 +3043,7 @@ sub SetImageInfo($$$)
                     $r3 = $et->SetSystemTags($file);
                 }
                 if ($r0 > 0 or $r1 > 0 or $r2 > 0 or $r3 > 0) {
+                    EFile($infile, 3);
                     ++$countGoodWr;
                 } elsif ($r0 < 0 or $r1 < 0 or $r2 < 0 or $r3 < 0) {
                     EFile($infile);
@@ -3128,6 +3158,7 @@ sub SetImageInfo($$$)
                                     $preserveTime{$file} = [ $aTime, $mTime, $cTime ];
                                 }
                             }
+                            EFile($infile, 3);
                             ++$countGoodWr;
                         } else {
                             close(NEW_FILE);
@@ -3143,6 +3174,7 @@ sub SetImageInfo($$$)
                     # simply rename temporary file to replace original
                     # (if we didn't already rename it to add "_original")
                     } elsif ($et->Rename($tmpFile, $dstFile)) {
+                        EFile($infile, 3);
                         ++$countGoodWr;
                     } else {
                         my $newFile = $tmpFile;
@@ -3160,21 +3192,26 @@ sub SetImageInfo($$$)
                             # (don't delete tmp file now because it is all we have left)
                             ++$countBadWr;
                         } else {
+                            EFile($infile, 3);
                             ++$countGoodWr;
                         }
                     }
                 } elsif ($overwriteOrig) {
                     # erase original file
+                    EFile($infile, 3);
                     $et->Unlink($file) or Warn "Error erasing original $file\n";
                     ++$countGoodWr;
                 } else {
+                    EFile($infile, 4);
                     ++$countGoodCr;
                 }
             } else {
                 # this file was created from scratch, not edited
+                EFile($infile, 4);
                 ++$countGoodCr;
             }
         } else {
+            EFile($infile, 3);
             ++$countGoodWr;
         }
     } elsif ($success) {
@@ -3659,8 +3696,19 @@ sub ProcessFiles($;$)
     foreach $file (@files) {
         $et->Options(CharsetFileName => 'UTF8') if $utf8FileName{$file};
         if (defined $progressMax) {
+            unless (defined $progressNext) {
+                $progressNext = $progressCount + $progressIncr;
+                $progressNext -= $progressNext % $progressIncr;
+                $progressNext = $progressMax if $progressNext > $progressMax;
+            }
             ++$progressCount;
-            $progStr = " [$progressCount/$progressMax]" if $progress;
+            if ($progress) {
+                if ($progressCount >= $progressNext) {
+                    $progStr = " [$progressCount/$progressMax]";
+                } else {
+                    undef $progStr; # don't update progress yet
+                }
+            }
         }
         if ($et->IsDirectory($file) and not $listDir) {
             $multiFile = $validFile = 1;
@@ -3668,7 +3716,7 @@ sub ProcessFiles($;$)
         } elsif ($filterFlag and not AcceptFile($file)) {
             if ($et->Exists($file)) {
                 $filtered = 1;
-                $verbose and print $vout "-------- $file (wrong extension)$progStr\n";
+                Progress($vout, "-------- $file (wrong extension)") if $verbose;
             } else {
                 Warn "Error: File not found - $file\n";
                 FileNotFound($file);
@@ -3716,8 +3764,6 @@ sub ScanDir($$;$)
         $utf8Name = 1;
     }
     return if $ignore{$dir};
-    my $oldBase = $seqFileBase;
-    $seqFileBase = $seqFileNum;
     # use Win32::FindFile on Windows if available
     # (ReadDir will croak if there is a wildcard, so check for this)
     if ($^O eq 'MSWin32' and $dir !~ /[*?]/) {
@@ -3749,7 +3795,6 @@ sub ScanDir($$;$)
         # use standard perl library routines to read directory
         unless (opendir(DIR_HANDLE, $dir)) {
             Warn("Error opening directory $dir\n");
-            $seqFileBase = $oldBase + ($seqFileNum - $seqFileBase);
             return;
         }
         @fileList = readdir(DIR_HANDLE);
@@ -3829,8 +3874,6 @@ sub ScanDir($$;$)
     }
     ++$countDir;
     $et->Options(CharsetFileName => $enc);  # restore original setting
-    # update sequential file base for parent directory
-    $seqFileBase = $oldBase + ($seqFileNum - $seqFileBase);
 }
 
 #------------------------------------------------------------------------------
@@ -4126,16 +4169,15 @@ sub NextUnusedFilename($;$)
     return $fmt unless $fmt =~ /%[-+]?\d*\.?\d*[lun]?[cC]/;
     my %sep = ( '-' => '-', '+' => '_' );
     my ($copy, $alpha) = (0, 'a');
-    my $seq = $seqFileNum - 1;
     for (;;) {
         my ($filename, $pos) = ('', 0);
         while ($fmt =~ /(%([-+]?)(\d*)(\.?)(\d*)([lun]?)([cC]))/g) {
             $filename .= substr($fmt, $pos, pos($fmt) - $pos - length($1));
             $pos = pos($fmt);
             my ($sign, $wid, $dec, $wid2, $mod, $tok) = ($2, $3 || 0, $4, $5 || 0, $6, $7);
-            my $diff;
+            my $seq;
             if ($tok eq 'C') {
-                $diff = $wid - ($sign eq '-' ? $seqFileBase : 0);
+                $seq = $wid + ($sign eq '-' ? $seqFileDir : $seqFileNum) - 1;
                 $wid = $wid2;
             } else {
                 next unless $dec or $copy;
@@ -4144,13 +4186,13 @@ sub NextUnusedFilename($;$)
                 $filename .= $sep{$sign} if $sign;
             }
             if ($mod and $mod ne 'n') {
-                my $a = $tok eq 'C' ? Num2Alpha($diff + $seq) : $alpha;
+                my $a = $tok eq 'C' ? Num2Alpha($seq) : $alpha;
                 my $str = ($wid and $wid > length $a) ? 'a' x ($wid - length($a)) : '';
                 $str .= $a;
                 $str = uc $str if $mod eq 'u';
                 $filename .= $str;
             } else {
-                my $c = $tok eq 'C' ? ($diff + $seq) : $copy;
+                my $c = $tok eq 'C' ? $seq : $copy;
                 my $num = $c + ($mod ? 1 : 0);
                 $filename .= $wid ? sprintf("%.${wid}d",$num) : $num;
             }
@@ -4165,7 +4207,6 @@ sub NextUnusedFilename($;$)
         }
         ++$copy;
         ++$alpha;
-        ++$seq;
     }
 }
 
@@ -4371,9 +4412,13 @@ sub ReadStayOpen($)
                     undef $optArgs;
                     next unless $lastOpt eq '-stay_open' or $lastOpt eq '-@';
                 } else {
-                    $optArgs = $optArgs{$arg};
                     $lastOpt = lc $arg;
-                    $optArgs = $optArgs{$lastOpt} unless defined $optArgs;
+                    $optArgs = $optArgs{$arg};
+                    unless (defined $optArgs) {
+                        $optArgs = $optArgs{$lastOpt};
+                        # handle options with trailing numbers
+                        $optArgs = $optArgs{"$1#$2"} if not defined $optArgs and $lastOpt =~ /^(.*?)\d+(!?)$/;
+                    }
                     next unless $lastOpt =~ /^-execute\d*$/;
                 }
                 $processArgs = 1;
@@ -4403,7 +4448,7 @@ sub ReadStayOpen($)
 
 #------------------------------------------------------------------------------
 # Add new entry to -efile output file
-# Inputs: 0) file name, 1) -efile option number (0=error, 1=same, 2=failed)
+# Inputs: 0) file name, 1) -efile option number (0=error, 1=same, 2=failed, 3=updated, 4=created)
 sub EFile($$)
 {
     my $entry = shift;
@@ -4421,6 +4466,18 @@ sub EFile($$)
         if ($err) {
             defined $_ and $_ eq $efile and undef $_ foreach @efile;
         }
+    }
+}
+
+#------------------------------------------------------------------------------
+# Print progress message if it is time for it
+# Inputs: 0) file ref, 1) message
+sub Progress($$)
+{
+    my ($file, $msg) = @_;
+    if (defined $progStr) {
+        print $file $msg, $progStr, "\n";
+        undef $progressNext;
     }
 }
 
@@ -4680,7 +4737,7 @@ OPTIONS
       -overwrite_original_in_place     Overwrite original by copying tmp file
       -P          (-preserve)          Preserve file modification date/time
       -password PASSWD                 Password for processing protected files
-      -progress[:[TITLE]]              Show file progress count
+      -progress[NUM][:[TITLE]]         Show file progress count
       -q          (-quiet)             Quiet processing
       -r[.]       (-recurse)           Recursively process subdirectories
       -scanForXMP                      Brute force XMP scan
@@ -4716,6 +4773,7 @@ OPTIONS
       -echo[NUM] TEXT                  Echo text to stdout or stderr
       -efile[NUM][!] ERRFILE           Save names of files with errors
       -execute[NUM]                    Execute multiple commands on one line
+      -fileNUM ALTFILE                 Load tags from alternate file
       -list_dir                        List directories, not their contents
       -srcfile FMT                     Process a different source file
       -stay_open FLAG                  Keep reading -@ argfile even after EOF
@@ -4731,8 +4789,10 @@ OPTIONS
          A tag name may include leading group names separated by colons (eg.
          "-EXIF:CreateDate", or "-Doc1:XMP:Creator"), and each group name
          may be prefixed by a digit to specify family number (eg.
-         "-1IPTC:City"). Use the -listg option to list available group names
-         by family.
+         "-1IPTC:City"). (Note that the API SavePath and SaveFormat options
+         must be used for the family 5 and 6 groups respectively to be
+         available.) Use the -listg option to list available group names by
+         family.
 
          A special tag name of "All" may be used to indicate all meta
          information (ie. -All). This is particularly useful when a group
@@ -4828,6 +4888,9 @@ OPTIONS
            TIFF Image:
            - Deleting EXIF only removes ExifIFD which also deletes
              InteropIFD and MakerNotes.
+
+           MOV/MP4 Video:
+           - Deleting ItemList also deletes Keys tags.
 
          Notes:
 
@@ -4932,7 +4995,9 @@ OPTIONS
          may be prefixed by a group name and/or suffixed by "#". Wildcards
          are allowed in both the source and destination tag names. A
          destination group and/or tag name of "All" or "*" writes to the
-         same family 1 group and/or tag name as the source. If no
+         same family 1 group and/or tag name as the source (but the family
+         may be specified by adding a leading number to the group name, eg.
+         "0All" writes to the same family 0 group as the source). If no
          destination group is specified, the information is written to the
          preferred group. Whitespace around the ">" or "<" is ignored. As a
          convenience, "-tagsFromFile @" is assumed for any redirected tags
@@ -4993,17 +5058,14 @@ OPTIONS
          operations. While this avoids duplicate list items when copying
          groups of tags from a file containing redundant information, it
          also prevents values of different tags from being copied into the
-         same list when this is the intent. So a -addTagsFromFile option is
-         provided which allows copying of multiple tags into the same list.
-         eg)
+         same list when this is the intent. To accumulate values from
+         different operations into the same list, add a "+" after the
+         initial "-" of the argument. For example:
 
-             exiftool -addtagsfromfile @ "-subject<make" "-subject<model" ...
+             exiftool -tagsfromfile @ '-subject<make' '-+subject<model' ...
 
-         Similarly, -addTagsFromFile must be used when conditionally
-         replacing a tag to prevent overriding earlier conditions.
-
-         Other than these differences, the -tagsFromFile and
-         -addTagsFromFile options are equivalent.
+         Similarly, "-+DSTTAG" must be used when conditionally replacing a
+         tag to prevent overriding earlier conditions.
 
          6) The -a option (allow duplicate tags) is always in effect when
          copying tags from *SRCFILE*, but the highest priority tag is always
@@ -5270,29 +5332,29 @@ OPTIONS
          are escaped. The inverse conversion is applied when writing tags.
 
     -f (-forcePrint)
-         Force printing of tags even if their values are not found. This
-         option only applies when specific tags are requested on the command
-         line (ie. not with wildcards or by "-all"). With this option, a
-         dash ("-") is printed for the value of any missing tag, but the
-         dash may be changed via the API MissingTagValue option. May also be
-         used to add a 'flags' attribute to the -listx output, or to allow
-         tags to be deleted when writing with the -csv=*CSVFILE* feature.
+         Force printing of tags even if they don't exist. This option
+         applies to tags specified on the command line, or with the -p, -if
+         or -tagsFromFile options. When -f is used, the value of any missing
+         tag is set to a dash ("-") by default, but this may be configured
+         via the API MissingTagValue option. -f is also used to add a
+         'flags' attribute to the -listx output, or to allow tags to be
+         deleted when writing with the -csv=*CSVFILE* feature.
 
     -g[*NUM*][:*NUM*...] (-groupHeadings)
          Organize output by tag group. *NUM* specifies a group family
          number, and may be 0 (general location), 1 (specific location), 2
          (category), 3 (document number), 4 (instance number), 5 (metadata
-         path), 6 (EXIF/TIFF format) or 7 (tag ID). -g0 is assumed if a
-         family number is not specified. May be combined with other options
-         to add group names to the output. Multiple families may be
-         specified by separating them with colons. By default the resulting
-         group name is simplified by removing any leading "Main:" and
-         collapsing adjacent identical group names, but this can be avoided
-         by placing a colon before the first family number (eg. -g:3:1). Use
-         the -listg option to list group names for a specified family. The
-         API SavePath and SaveFormat options are automatically enabled if
-         the respective family 5 or 6 group names are requested. See the API
-         GetGroup documentation for more information.
+         path), 6 (EXIF/TIFF format), 7 (tag ID) or 8 (file number). -g0 is
+         assumed if a family number is not specified. May be combined with
+         other options to add group names to the output. Multiple families
+         may be specified by separating them with colons. By default the
+         resulting group name is simplified by removing any leading "Main:"
+         and collapsing adjacent identical group names, but this can be
+         avoided by placing a colon before the first family number (eg.
+         -g:3:1). Use the -listg option to list group names for a specified
+         family. The API SavePath and SaveFormat options are automatically
+         enabled if the respective family 5 or 6 group names are requested.
+         See the API GetGroup documentation for more information.
 
     -G[*NUM*][:*NUM*...] (-groupNames)
          Same as -g but print group name for each tag. -G0 is assumed if
@@ -5472,8 +5534,10 @@ OPTIONS
          file. Tag names in the format file or string begin with a "$"
          symbol and may contain leading group names and/or a trailing "#"
          (to disable print conversion). Case is not significant. Braces "{}"
-         may be used around the tag name to separate it from subsequent
-         text. Use $$ to represent a "$" symbol, and $/ for a newline.
+         may be used around the tag name to separate it from subsequent text
+         (and must be used if subsequent text begins with an alphanumeric
+         character, hyphen, underline, colon or number sign). Use $$ to
+         represent a "$" symbol, and $/ for a newline.
 
          Multiple -p options may be used, each contributing a line (or more)
          of text to the output. Lines beginning with "#[HEAD]" and "#[TAIL]"
@@ -5501,7 +5565,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.56 --
+             -- Generated by ExifTool 12.60 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -6144,7 +6208,7 @@ OPTIONS
          issued and the document is not processed. This option is ignored if
          a password is not required.
 
-    -progress[:[*TITLE*]]
+    -progress[NUM][:[*TITLE*]]
          Show the progress when processing files. Without a colon, the
          -progress option adds a progress count in brackets after the name
          of each processed file, giving the current file number and the
@@ -6152,18 +6216,20 @@ OPTIONS
          causing the names of processed files to also be printed when
          writing. When combined with the -if option, the total count
          includes all files before the condition is applied, but files that
-         fail the condition will not have their names printed.
+         fail the condition will not have their names printed. If NUM is
+         specified, the progress is shown every NUM input files.
 
          If followed by a colon (ie. -progress:), the console window title
          is set according to the specified *TITLE* string. If no *TITLE* is
          given, a default *TITLE* string of "ExifTool %p%%" is assumed. In
          the string, %f represents the file name, %p is the progress as a
          percent, %r is the progress as a ratio, %##b is a progress bar of
-         width "##" (20 characters if "##" is omitted), and %% is a %
-         character. May be combined with the normal -progress option to also
-         show the progress count in console messages. (Note: For this
-         feature to function correctly on Mac/Linux, stderr must go to the
-         console.)
+         width "##" (where "##" is an integer specifying the bar width in
+         characters, or 20 characters by default if "##" is omitted), and %%
+         is a % character. May be combined with the normal -progress option
+         to also show the progress count in console messages. (Note: For
+         this feature to function correctly on Mac/Linux, stderr must go to
+         the console.)
 
     -q (-quiet)
          Quiet processing. One -q suppresses normal informational messages,
@@ -6387,10 +6453,10 @@ OPTIONS
          module is the only plug-in module distributed with exiftool. This
          module adds read/write support for tags as recommended by the
          Metadata Working Group. As a convenience, "-use MWG" is assumed if
-         the "MWG" group is specified for any tag on the command line. See
-         the MWG Tags documentation for more details. Note that this option
-         is not reversible, and remains in effect until the application
-         terminates, even across the -execute option.
+         the group name prefix starts with "MWG:" exactly for any requested
+         tag. See the MWG Tags documentation for more details. Note that
+         this option is not reversible, and remains in effect until the
+         application terminates, even across the -execute option.
 
    Utilities
     -restore_original
@@ -6462,12 +6528,13 @@ OPTIONS
     -efile[*NUM*][!] *ERRFILE*
          Save the names of files giving errors (*NUM* missing or 1), files
          that were unchanged (*NUM* is 2), files that fail the -if condition
-         (*NUM* is 4), or any combination thereof by summing *NUM* (eg.
-         -efile3 is the same has having both -efile and -efile2 options with
-         the same *ERRFILE*). By default, file names are appended to any
-         existing *ERRFILE*, but *ERRFILE* is overwritten if an exclamation
-         point is added to the option (eg. -efile!). Saves the name of the
-         file specified by the -srcfile option if applicable.
+         (*NUM* is 4), files that were updated (*NUM* is 8), files that were
+         created (*NUM* is 16), or any combination thereof by summing *NUM*
+         (eg. -efile3 is the same has having both -efile and -efile2 options
+         with the same *ERRFILE*). By default, file names are appended to
+         any existing *ERRFILE*, but *ERRFILE* is overwritten if an
+         exclamation point is added to the option (eg. -efile!). Saves the
+         name of the file specified by the -srcfile option if applicable.
 
     -execute[*NUM*]
          Execute command for all arguments up to this point on the command
@@ -6479,6 +6546,14 @@ OPTIONS
          that is echoed in the "{ready}" message when using the -stay_open
          feature. If a *NUM* is specified, the -q option no longer
          suppresses the output "{readyNUM}" message.
+
+    -file*NUM* *ALTFILE*
+         Read tags from an alternate source file. These tags are accessed
+         via the family 8 group name (eg. "File1:TAG" for the -file1 option,
+         "File2:TAG" for -file2, etc). *ALTFILE* may contain filename
+         formatting codes %d, %f and %e. Among other things, this allows
+         tags from different files to be compared and combined using the -if
+         and -p options.
 
     -list_dir
          List directories themselves instead of their contents. This option

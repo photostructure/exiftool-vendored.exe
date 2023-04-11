@@ -420,6 +420,48 @@ sub ValidateImageData($$$;$)
 }
 
 #------------------------------------------------------------------------------
+# Add specified image data to ImageDataMD5 hash
+# Inputs: 0) ExifTool ref, 1) dirInfo ref, 2) lookup for [tagInfo,value] based on tagID
+sub AddImageDataMD5($$$)
+{
+    my ($et, $dirInfo, $offsetInfo) = @_;
+    my ($tagID, $offset, $buff);
+
+    my $verbose = $et->Options('Verbose');
+    my $md5 = $$et{ImageDataMD5};
+    my $raf = $$dirInfo{RAF};
+
+    foreach $tagID (sort keys %$offsetInfo) {
+        next unless ref $$offsetInfo{$tagID} eq 'ARRAY'; # ignore scalar tag values used for Validate
+        my $tagInfo = $$offsetInfo{$tagID}[0];
+        next unless $$tagInfo{IsImageData};     # only consider image data
+        my $sizeID = $$tagInfo{OffsetPair};
+        my @sizes;
+        if ($$tagInfo{NotRealPair}) {
+            @sizes = 999999999;     # (Panasonic hack: raw data runs to end of file)
+        } elsif ($sizeID and $$offsetInfo{$sizeID}) {
+            @sizes = split ' ', $$offsetInfo{$sizeID}[1];
+        } else {
+            next;
+        }
+        my @offsets = split ' ', $$offsetInfo{$tagID}[1];
+        $sizes[0] = 999999999 if $$tagInfo{NotRealPair};
+        my $total = 0;
+        foreach $offset (@offsets) {
+            my $size = shift @sizes;
+            next unless $offset =~ /^\d+$/ and $size and $size =~ /^\d+$/ and $size;
+            next unless $raf->Seek($offset, 0); # (offset is absolute)
+            $total += $et->ImageDataMD5($raf, $size);
+        }
+        if ($verbose) {
+            my $name = "$$dirInfo{DirName}:$$tagInfo{Name}";
+            $name =~ s/Offsets?|Start$//;
+            $et->VPrint(0, "$$et{INDENT}(ImageDataMD5: $total bytes of $name data)\n");
+        }
+    }
+}
+
+#------------------------------------------------------------------------------
 # Handle error while writing EXIF
 # Inputs: 0) ExifTool ref, 1) error string, 2) tag table ref
 # Returns: undef on fatal error, or '' if minor error is ignored
