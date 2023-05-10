@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '12.60';
+my $version = '12.62';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -379,13 +379,14 @@ if ($exePath =~ /\(([^\\\/]+)\)(.exe|.pl)?$/i) {
 
 # isolate arguments common to all commands
 if (grep /^-common_args$/i, @ARGV) {
-    my (@newArgs, $common);
+    my (@newArgs, $common, $end);
     foreach (@ARGV) {
-        if (/^-common_args$/i) {
+        if (/^-common_args$/i and not $end) {
             $common = 1;
         } elsif ($common) {
             push @commonArgs, $_;
         } else {
+            $end = 1 if $_ eq '--';
             push @newArgs, $_;
         }
     }
@@ -850,7 +851,7 @@ for (;;) {
                 $mt->Options(Charset => $charset);
             }
             if ($evalWarning) {
-                warn $evalWarning;
+                Warn $evalWarning;
             } else {
                 $setCharset = $mt->Options('Charset');
             }
@@ -1735,7 +1736,8 @@ if ($textOut) {
 if ($outOpt) {
     my $type = GetFileType($outOpt);
     if ($type) {
-        unless (CanWrite($type)) {
+        # (must test original file name because we can write .webp but not other RIFF types)
+        unless (CanWrite($outOpt)) {
             Warn "Can't write $type files\n";
             $rtnVal = 1;
             next;
@@ -1949,23 +1951,31 @@ sub GetImageInfo($$)
     my (@foundTags, $info, $file, $ind, $g8);
 
     # set window title for this file if necessary
-    if (defined $windowTitle and $progressCount >= $progressNext) {
-        my $prog = $progressMax ? "$progressCount/$progressMax" : '0/0';
-        my $title = $windowTitle;
-        my ($num, $denom) = split '/', $prog;
-        my $frac = $num / ($denom || 1);
-        my $n = $title =~ s/%(\d+)b/%b/ ? $1 : 20;  # length of bar
-        my $bar = int($frac * $n + 0.5);
-        my %lkup = (
-            b => ('I' x $bar) . ('.' x ($n - $bar)), # (undocumented)
-            f => $orig,
-            p => int(100 * $frac + 0.5),
-            r => $prog,
-           '%'=> '%',
-        );
-        $title =~ s/%([%bfpr])/$lkup{$1}/eg;
-        SetWindowTitle($title);
-        undef $progressNext;
+    if (defined $windowTitle) {
+        if ($progressCount >= $progressNext) {
+            my $prog = $progressMax ? "$progressCount/$progressMax" : '0/0';
+            my $title = $windowTitle;
+            my ($num, $denom) = split '/', $prog;
+            my $frac = $num / ($denom || 1);
+            my $n = $title =~ s/%(\d+)b/%b/ ? $1 : 20;  # length of bar
+            my $bar = int($frac * $n + 0.5);
+            my %lkup = (
+                b => ('I' x $bar) . ('.' x ($n - $bar)),
+                f => $orig,
+                p => int(100 * $frac + 0.5),
+                r => $prog,
+               '%'=> '%',
+            );
+            $title =~ s/%([%bfpr])/$lkup{$1}/eg;
+            SetWindowTitle($title);
+            if (defined $progressMax) {
+                undef $progressNext;
+            } else {
+                $progressNext += $progressIncr;
+            }
+        }
+        # ($progressMax is not defined for "-progress:%f")
+        ++$progressCount unless defined $progressMax;
     }
     unless (length $orig or $outOpt) {
         Warn qq(Error: Zero-length file name - ""\n);
@@ -1991,7 +2001,11 @@ sub GetImageInfo($$)
     }
     # set alternate file names
     foreach $g8 (sort keys %altFile) {
-        my $altName = FilenameSPrintf($altFile{$g8}, $orig);
+        my $altName = $orig;
+        # must double any '$' symbols in the original file name because
+        # they are used for tag names in a -fileNUM argument
+        $altName =~ s/\$/\$\$/g;
+        $altName = FilenameSPrintf($altFile{$g8}, $altName);
         $et->SetAlternateFile($g8, $altName);
     }
 
@@ -2534,6 +2548,7 @@ TAG:    foreach $tag (@foundTags) {
                     $xtra .= " et:table='${table}'";
                     $xtra .= " et:index='${index}'" if defined $index;
                 }
+                # Note: New $xtra attributes must be added to %ignoreEtProp in XMP.pm!
                 my $lastVal = $val;
                 for ($valNum=0; $valNum<2; ++$valNum) {
                     $val = FormatXML($val, $ind, $group);
@@ -3698,7 +3713,7 @@ sub ProcessFiles($;$)
         if (defined $progressMax) {
             unless (defined $progressNext) {
                 $progressNext = $progressCount + $progressIncr;
-                $progressNext -= $progressNext % $progressIncr;
+                $progressNext -= $progressNext % $progressIncr; # (show even multiples)
                 $progressNext = $progressMax if $progressNext > $progressMax;
             }
             ++$progressCount;
@@ -4477,7 +4492,7 @@ sub Progress($$)
     my ($file, $msg) = @_;
     if (defined $progStr) {
         print $file $msg, $progStr, "\n";
-        undef $progressNext;
+        undef $progressNext if defined $progressMax;
     }
 }
 
@@ -4599,48 +4614,49 @@ DESCRIPTION
 
       File Types
       ------------+-------------+-------------+-------------+------------
-      360   r/w   | DPX   r     | ITC   r     | NRW   r/w   | RAM   r
-      3FR   r     | DR4   r/w/c | J2C   r     | NUMBERS r   | RAR   r
-      3G2   r/w   | DSS   r     | JNG   r/w   | O     r     | RAW   r/w
-      3GP   r/w   | DV    r     | JP2   r/w   | ODP   r     | RIFF  r
-      A     r     | DVB   r/w   | JPEG  r/w   | ODS   r     | RSRC  r
-      AA    r     | DVR-MS r    | JSON  r     | ODT   r     | RTF   r
-      AAE   r     | DYLIB r     | JXL   r     | OFR   r     | RW2   r/w
-      AAX   r/w   | EIP   r     | K25   r     | OGG   r     | RWL   r/w
-      ACR   r     | EPS   r/w   | KDC   r     | OGV   r     | RWZ   r
-      AFM   r     | EPUB  r     | KEY   r     | ONP   r     | RM    r
-      AI    r/w   | ERF   r/w   | LA    r     | OPUS  r     | SEQ   r
-      AIFF  r     | EXE   r     | LFP   r     | ORF   r/w   | SKETCH r
-      APE   r     | EXIF  r/w/c | LIF   r     | ORI   r/w   | SO    r
-      ARQ   r/w   | EXR   r     | LNK   r     | OTF   r     | SR2   r/w
-      ARW   r/w   | EXV   r/w/c | LRV   r/w   | PAC   r     | SRF   r
-      ASF   r     | F4A/V r/w   | M2TS  r     | PAGES r     | SRW   r/w
-      AVI   r     | FFF   r/w   | M4A/V r/w   | PBM   r/w   | SVG   r
-      AVIF  r/w   | FITS  r     | MACOS r     | PCD   r     | SWF   r
-      AZW   r     | FLA   r     | MAX   r     | PCX   r     | THM   r/w
-      BMP   r     | FLAC  r     | MEF   r/w   | PDB   r     | TIFF  r/w
-      BPG   r     | FLIF  r/w   | MIE   r/w/c | PDF   r/w   | TORRENT r
-      BTF   r     | FLV   r     | MIFF  r     | PEF   r/w   | TTC   r
-      CHM   r     | FPF   r     | MKA   r     | PFA   r     | TTF   r
-      COS   r     | FPX   r     | MKS   r     | PFB   r     | TXT   r
-      CR2   r/w   | GIF   r/w   | MKV   r     | PFM   r     | VCF   r
-      CR3   r/w   | GPR   r/w   | MNG   r/w   | PGF   r     | VNT   r
-      CRM   r/w   | GZ    r     | MOBI  r     | PGM   r/w   | VRD   r/w/c
-      CRW   r/w   | HDP   r/w   | MODD  r     | PLIST r     | VSD   r
-      CS1   r/w   | HDR   r     | MOI   r     | PICT  r     | WAV   r
-      CSV   r     | HEIC  r/w   | MOS   r/w   | PMP   r     | WDP   r/w
-      CUR   r     | HEIF  r/w   | MOV   r/w   | PNG   r/w   | WEBP  r/w
-      CZI   r     | HTML  r     | MP3   r     | PPM   r/w   | WEBM  r
-      DCM   r     | ICC   r/w/c | MP4   r/w   | PPT   r     | WMA   r
-      DCP   r/w   | ICO   r     | MPC   r     | PPTX  r     | WMV   r
-      DCR   r     | ICS   r     | MPG   r     | PS    r/w   | WTV   r
-      DFONT r     | IDML  r     | MPO   r/w   | PSB   r/w   | WV    r
-      DIVX  r     | IIQ   r/w   | MQV   r/w   | PSD   r/w   | X3F   r/w
-      DJVU  r     | IND   r/w   | MRC   r     | PSP   r     | XCF   r
-      DLL   r     | INSP  r/w   | MRW   r/w   | QTIF  r/w   | XLS   r
-      DNG   r/w   | INSV  r     | MXF   r     | R3D   r     | XLSX  r
-      DOC   r     | INX   r     | NEF   r/w   | RA    r     | XMP   r/w/c
-      DOCX  r     | ISO   r     | NKSC  r/w   | RAF   r/w   | ZIP   r
+      360   r/w   | DR4   r/w/c | JNG   r/w   | ODP   r     | RSRC  r
+      3FR   r     | DSS   r     | JP2   r/w   | ODS   r     | RTF   r
+      3G2   r/w   | DV    r     | JPEG  r/w   | ODT   r     | RW2   r/w
+      3GP   r/w   | DVB   r/w   | JSON  r     | OFR   r     | RWL   r/w
+      A     r     | DVR-MS r    | JXL   r     | OGG   r     | RWZ   r
+      AA    r     | DYLIB r     | K25   r     | OGV   r     | RM    r
+      AAE   r     | EIP   r     | KDC   r     | ONP   r     | SEQ   r
+      AAX   r/w   | EPS   r/w   | KEY   r     | OPUS  r     | SKETCH r
+      ACR   r     | EPUB  r     | LA    r     | ORF   r/w   | SO    r
+      AFM   r     | ERF   r/w   | LFP   r     | ORI   r/w   | SR2   r/w
+      AI    r/w   | EXE   r     | LIF   r     | OTF   r     | SRF   r
+      AIFF  r     | EXIF  r/w/c | LNK   r     | PAC   r     | SRW   r/w
+      APE   r     | EXR   r     | LRV   r/w   | PAGES r     | SVG   r
+      ARQ   r/w   | EXV   r/w/c | M2TS  r     | PBM   r/w   | SWF   r
+      ARW   r/w   | F4A/V r/w   | M4A/V r/w   | PCD   r     | THM   r/w
+      ASF   r     | FFF   r/w   | MACOS r     | PCX   r     | TIFF  r/w
+      AVI   r     | FITS  r     | MAX   r     | PDB   r     | TORRENT r
+      AVIF  r/w   | FLA   r     | MEF   r/w   | PDF   r/w   | TTC   r
+      AZW   r     | FLAC  r     | MIE   r/w/c | PEF   r/w   | TTF   r
+      BMP   r     | FLIF  r/w   | MIFF  r     | PFA   r     | TXT   r
+      BPG   r     | FLV   r     | MKA   r     | PFB   r     | VCF   r
+      BTF   r     | FPF   r     | MKS   r     | PFM   r     | VNT   r
+      CHM   r     | FPX   r     | MKV   r     | PGF   r     | VRD   r/w/c
+      COS   r     | GIF   r/w   | MNG   r/w   | PGM   r/w   | VSD   r
+      CR2   r/w   | GPR   r/w   | MOBI  r     | PLIST r     | WAV   r
+      CR3   r/w   | GZ    r     | MODD  r     | PICT  r     | WDP   r/w
+      CRM   r/w   | HDP   r/w   | MOI   r     | PMP   r     | WEBP  r/w
+      CRW   r/w   | HDR   r     | MOS   r/w   | PNG   r/w   | WEBM  r
+      CS1   r/w   | HEIC  r/w   | MOV   r/w   | PPM   r/w   | WMA   r
+      CSV   r     | HEIF  r/w   | MP3   r     | PPT   r     | WMV   r
+      CUR   r     | HTML  r     | MP4   r/w   | PPTX  r     | WPG   r
+      CZI   r     | ICC   r/w/c | MPC   r     | PS    r/w   | WTV   r
+      DCM   r     | ICO   r     | MPG   r     | PSB   r/w   | WV    r
+      DCP   r/w   | ICS   r     | MPO   r/w   | PSD   r/w   | X3F   r/w
+      DCR   r     | IDML  r     | MQV   r/w   | PSP   r     | XCF   r
+      DFONT r     | IIQ   r/w   | MRC   r     | QTIF  r/w   | XLS   r
+      DIVX  r     | IND   r/w   | MRW   r/w   | R3D   r     | XLSX  r
+      DJVU  r     | INSP  r/w   | MXF   r     | RA    r     | XMP   r/w/c
+      DLL   r     | INSV  r     | NEF   r/w   | RAF   r/w   | ZIP   r
+      DNG   r/w   | INX   r     | NKSC  r/w   | RAM   r     |
+      DOC   r     | ISO   r     | NRW   r/w   | RAR   r     |
+      DOCX  r     | ITC   r     | NUMBERS r   | RAW   r/w   |
+      DPX   r     | J2C   r     | O     r     | RIFF  r     |
 
       Meta Information
       ----------------------+----------------------+---------------------
@@ -4677,7 +4693,7 @@ OPTIONS
       -TAG or --TAG                    Extract or exclude specified tag
       -TAG[+-^]=[VALUE]                Write new value for tag
       -TAG[+-]<=DATFILE                Write tag value from contents of file
-      -TAG[+-]<SRCTAG                  Copy tag value (see -tagsFromFile)
+      -[+]TAG[+-]<SRCTAG               Copy tag value (see -tagsFromFile)
 
       -tagsFromFile SRCFILE            Copy tag values from file
       -x TAG      (-exclude)           Exclude specified tag
@@ -5565,7 +5581,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.60 --
+             -- Generated by ExifTool 12.62 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -6548,12 +6564,23 @@ OPTIONS
          suppresses the output "{readyNUM}" message.
 
     -file*NUM* *ALTFILE*
-         Read tags from an alternate source file. These tags are accessed
-         via the family 8 group name (eg. "File1:TAG" for the -file1 option,
-         "File2:TAG" for -file2, etc). *ALTFILE* may contain filename
-         formatting codes %d, %f and %e. Among other things, this allows
-         tags from different files to be compared and combined using the -if
-         and -p options.
+         Read tags from an alternate source file. Among other things, this
+         allows tags from different files to be compared and combined using
+         the -if and -p options. Tags from alternate files are accessed via
+         the corresponding family 8 group name (eg. "File1:TAG" for the
+         -file1 option, "File2:TAG" for -file2, etc). *ALTFILE* may contain
+         filename formatting codes like the -w option (%d, %f, etc), and/or
+         tag names with a leading "$" symbol to access tags from the source
+         file in the same way as the -p option (so any other dollar symbol
+         in the file name must be doubled, eg. "money$$.jpg"). For example,
+         assuming that the OriginalFileName tag has been set in the edited
+         file, a command to copy Rights from the original file could look
+         like this:
+
+             exiftool -file1 "$originalfilename" "-rights<file1:rights" edited.jpg
+
+         Composite tags may access tags from alternate files using the
+         appropriate (case-sensitive) family 8 group name.
 
     -list_dir
          List directories themselves instead of their contents. This option
