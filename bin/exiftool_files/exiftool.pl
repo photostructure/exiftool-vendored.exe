@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '12.62';
+my $version = '12.65';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -290,8 +290,11 @@ my @recommends = qw(
     POSIX::strptime
     Time::Local
     Unicode::LineBreak
+    Compress::Raw::Lzma
     IO::Compress::RawDeflate
     IO::Uncompress::RawInflate
+    IO::Compress::Brotli
+    IO::Uncompress::Brotli
     Win32::API
     Win32::FindFile
     Win32API::File
@@ -736,6 +739,13 @@ for (;;) {
             print "ExifTool version $version$str$Image::ExifTool::RELEASE\n";
             printf "Perl version %s%s\n", $], (defined ${^UNICODE} ? " (-C${^UNICODE})" : '');
             print "Platform: $^O\n";
+            if ($verbose > 8) {
+                print "Current Dir: " . Cwd::getcwd() . "\n" if (eval { require Cwd });
+                print "Script Name: $0\n";
+                print "Exe Name:    $^X\n";
+                print "Exe Dir:     $Image::ExifTool::exeDir\n";
+                print "Exe Path:    $exePath\n";
+            }
             print "Optional libraries:\n";
             foreach (@recommends) {
                 next if /^Win32/ and $^O ne 'MSWin32';
@@ -817,11 +827,17 @@ for (;;) {
     /^(-?)(a|duplicates)$/i and $mt->Options(Duplicates => ($1 ? 0 : 1)), next;
     if ($a eq 'api') {
         my $opt = shift;
-        defined $opt or Error("Expected OPT[=VAL] argument for -api option\n"), $badCmd=1, next;
-        my $val = ($opt =~ s/=(.*)//s) ? $1 : 1;
-        # empty string means an undefined value unless ^= is used
-        $val = undef unless $opt =~ s/\^$// or length $val;
-        $mt->Options($opt => $val);
+        if (defined $opt and length $opt) {
+            my $val = ($opt =~ s/=(.*)//s) ? $1 : 1;
+            # empty string means an undefined value unless ^= is used
+            $val = undef unless $opt =~ s/\^$// or length $val;
+            $mt->Options($opt => $val);
+        } else {
+            print "Available API Options:\n";
+            my $availableOptions = Image::ExifTool::AvailableOptions();
+            printf("  %-17s - %s\n", $$_[0], $$_[2]) foreach @$availableOptions;
+            $helped = 1;
+        }
         next;
     }
     /^arg(s|format)$/i and $argFormat = 1, next;
@@ -1462,6 +1478,10 @@ if ($csv and $csv eq 'CSV' and not $isWriting) {
     if ($binaryOutput) {
         $binaryOutput = 0;
         $setCharset = 'default' unless defined $setCharset;
+    }
+    if (%printFmt) {
+        Warn "The -csv option has no effect when -p is used\n";
+        undef $csv;
     }
     require Image::ExifTool::XMP if $setCharset;
 }
@@ -2361,7 +2381,7 @@ TAG:    foreach $tag (@foundTags) {
                 next unless defined $val;
                 if ($structOpt and ref $val) {
                     # serialize structure if necessary
-                    $val = Image::ExifTool::XMP::SerializeStruct($val) unless $xml or $json;
+                    $val = Image::ExifTool::XMP::SerializeStruct($et, $val) unless $xml or $json;
                 } elsif (ref $val eq 'ARRAY') {
                     if (defined $listItem) {
                         # take only the specified item
@@ -2510,7 +2530,7 @@ TAG:    foreach $tag (@foundTags) {
                 my $tok = "$group:$tagName";
                 if ($outFormat > 0) {
                     if ($structOpt and ref $val) {
-                        $val = Image::ExifTool::XMP::SerializeStruct($val);
+                        $val = Image::ExifTool::XMP::SerializeStruct($et, $val);
                     }
                     if ($escapeHTML) {
                         $val =~ tr/\0-\x08\x0b\x0c\x0e-\x1f/./;
@@ -2857,7 +2877,7 @@ sub SetImageInfo($$$)
         }
         unless ($isStdout) {
             $outfile = NextUnusedFilename($outfile);
-            if ($et->Exists($outfile) and not $doSetFileName) {
+            if ($et->Exists($outfile, 1) and not $doSetFileName) {
                 Warn "Error: '${outfile}' already exists - $infile\n";
                 EFile($infile);
                 ++$countBadWr;
@@ -2988,7 +3008,7 @@ sub SetImageInfo($$$)
                 $outfile = Image::ExifTool::GetNewFileName(defined $outfile ? $outfile : $file, $newDir);
             }
             $outfile = NextUnusedFilename($outfile, $infile);
-            if ($et->Exists($outfile)) {
+            if ($et->Exists($outfile, 1)) {
                 if ($infile eq $outfile) {
                     undef $outfile;     # not changing the file name after all
                 # (allow for case-insensitive filesystems)
@@ -4068,6 +4088,8 @@ sub SuggestedExtension($$$)
         $ext = 'dr4';
     } elsif ($$valPt =~ /^(.{10}|.{522})(\x11\x01|\x00\x11)/s) {
         $ext = 'pict';
+    } elsif ($$valPt =~ /^\xff\x0a|\0\0\0\x0cJXL \x0d\x0a......ftypjxl/s) {
+        $ext = 'jxl';
     } else {
         $ext = 'dat';
     }
@@ -4214,7 +4236,7 @@ sub NextUnusedFilename($;$)
         }
         $filename .= substr($fmt, $pos); # add rest of file name
         # return now with filename unless file exists
-        return $filename unless ($mt->Exists($filename) and not defined $usedFileName{$filename}) or $usedFileName{$filename};
+        return $filename unless ($mt->Exists($filename, 1) and not defined $usedFileName{$filename}) or $usedFileName{$filename};
         if (defined $okfile) {
             return $filename if $filename eq $okfile;
             my ($fn, $ok) = (AbsPath($filename), AbsPath($okfile));
@@ -4294,7 +4316,7 @@ sub OpenOutputFile($;@)
             $outfile .= $textOut;
         }
         my $mode = '>';
-        if ($mt->Exists($outfile)) {
+        if ($mt->Exists($outfile, 1)) {
             unless ($textOverwrite) {
                 Warn "Output file $outfile already exists for $file\n";
                 return ();
@@ -4614,49 +4636,49 @@ DESCRIPTION
 
       File Types
       ------------+-------------+-------------+-------------+------------
-      360   r/w   | DR4   r/w/c | JNG   r/w   | ODP   r     | RSRC  r
-      3FR   r     | DSS   r     | JP2   r/w   | ODS   r     | RTF   r
-      3G2   r/w   | DV    r     | JPEG  r/w   | ODT   r     | RW2   r/w
-      3GP   r/w   | DVB   r/w   | JSON  r     | OFR   r     | RWL   r/w
-      A     r     | DVR-MS r    | JXL   r     | OGG   r     | RWZ   r
-      AA    r     | DYLIB r     | K25   r     | OGV   r     | RM    r
-      AAE   r     | EIP   r     | KDC   r     | ONP   r     | SEQ   r
-      AAX   r/w   | EPS   r/w   | KEY   r     | OPUS  r     | SKETCH r
-      ACR   r     | EPUB  r     | LA    r     | ORF   r/w   | SO    r
-      AFM   r     | ERF   r/w   | LFP   r     | ORI   r/w   | SR2   r/w
-      AI    r/w   | EXE   r     | LIF   r     | OTF   r     | SRF   r
-      AIFF  r     | EXIF  r/w/c | LNK   r     | PAC   r     | SRW   r/w
-      APE   r     | EXR   r     | LRV   r/w   | PAGES r     | SVG   r
-      ARQ   r/w   | EXV   r/w/c | M2TS  r     | PBM   r/w   | SWF   r
-      ARW   r/w   | F4A/V r/w   | M4A/V r/w   | PCD   r     | THM   r/w
-      ASF   r     | FFF   r/w   | MACOS r     | PCX   r     | TIFF  r/w
-      AVI   r     | FITS  r     | MAX   r     | PDB   r     | TORRENT r
-      AVIF  r/w   | FLA   r     | MEF   r/w   | PDF   r/w   | TTC   r
-      AZW   r     | FLAC  r     | MIE   r/w/c | PEF   r/w   | TTF   r
-      BMP   r     | FLIF  r/w   | MIFF  r     | PFA   r     | TXT   r
-      BPG   r     | FLV   r     | MKA   r     | PFB   r     | VCF   r
-      BTF   r     | FPF   r     | MKS   r     | PFM   r     | VNT   r
-      CHM   r     | FPX   r     | MKV   r     | PGF   r     | VRD   r/w/c
-      COS   r     | GIF   r/w   | MNG   r/w   | PGM   r/w   | VSD   r
-      CR2   r/w   | GPR   r/w   | MOBI  r     | PLIST r     | WAV   r
-      CR3   r/w   | GZ    r     | MODD  r     | PICT  r     | WDP   r/w
-      CRM   r/w   | HDP   r/w   | MOI   r     | PMP   r     | WEBP  r/w
-      CRW   r/w   | HDR   r     | MOS   r/w   | PNG   r/w   | WEBM  r
-      CS1   r/w   | HEIC  r/w   | MOV   r/w   | PPM   r/w   | WMA   r
-      CSV   r     | HEIF  r/w   | MP3   r     | PPT   r     | WMV   r
-      CUR   r     | HTML  r     | MP4   r/w   | PPTX  r     | WPG   r
-      CZI   r     | ICC   r/w/c | MPC   r     | PS    r/w   | WTV   r
-      DCM   r     | ICO   r     | MPG   r     | PSB   r/w   | WV    r
-      DCP   r/w   | ICS   r     | MPO   r/w   | PSD   r/w   | X3F   r/w
-      DCR   r     | IDML  r     | MQV   r/w   | PSP   r     | XCF   r
-      DFONT r     | IIQ   r/w   | MRC   r     | QTIF  r/w   | XLS   r
-      DIVX  r     | IND   r/w   | MRW   r/w   | R3D   r     | XLSX  r
-      DJVU  r     | INSP  r/w   | MXF   r     | RA    r     | XMP   r/w/c
-      DLL   r     | INSV  r     | NEF   r/w   | RAF   r/w   | ZIP   r
-      DNG   r/w   | INX   r     | NKSC  r/w   | RAM   r     |
-      DOC   r     | ISO   r     | NRW   r/w   | RAR   r     |
-      DOCX  r     | ITC   r     | NUMBERS r   | RAW   r/w   |
-      DPX   r     | J2C   r     | O     r     | RIFF  r     |
+      360   r/w   | DPX   r     | ITC   r     | NUMBERS r   | RAW   r/w
+      3FR   r     | DR4   r/w/c | J2C   r     | O     r     | RIFF  r
+      3G2   r/w   | DSS   r     | JNG   r/w   | ODP   r     | RSRC  r
+      3GP   r/w   | DV    r     | JP2   r/w   | ODS   r     | RTF   r
+      7Z    r     | DVB   r/w   | JPEG  r/w   | ODT   r     | RW2   r/w
+      A     r     | DVR-MS r    | JSON  r     | OFR   r     | RWL   r/w
+      AA    r     | DYLIB r     | JXL   r     | OGG   r     | RWZ   r
+      AAE   r     | EIP   r     | K25   r     | OGV   r     | RM    r
+      AAX   r/w   | EPS   r/w   | KDC   r     | ONP   r     | SEQ   r
+      ACR   r     | EPUB  r     | KEY   r     | OPUS  r     | SKETCH r
+      AFM   r     | ERF   r/w   | LA    r     | ORF   r/w   | SO    r
+      AI    r/w   | EXE   r     | LFP   r     | ORI   r/w   | SR2   r/w
+      AIFF  r     | EXIF  r/w/c | LIF   r     | OTF   r     | SRF   r
+      APE   r     | EXR   r     | LNK   r     | PAC   r     | SRW   r/w
+      ARQ   r/w   | EXV   r/w/c | LRV   r/w   | PAGES r     | SVG   r
+      ARW   r/w   | F4A/V r/w   | M2TS  r     | PBM   r/w   | SWF   r
+      ASF   r     | FFF   r/w   | M4A/V r/w   | PCD   r     | THM   r/w
+      AVI   r     | FITS  r     | MACOS r     | PCX   r     | TIFF  r/w
+      AVIF  r/w   | FLA   r     | MAX   r     | PDB   r     | TORRENT r
+      AZW   r     | FLAC  r     | MEF   r/w   | PDF   r/w   | TTC   r
+      BMP   r     | FLIF  r/w   | MIE   r/w/c | PEF   r/w   | TTF   r
+      BPG   r     | FLV   r     | MIFF  r     | PFA   r     | TXT   r
+      BTF   r     | FPF   r     | MKA   r     | PFB   r     | VCF   r
+      CHM   r     | FPX   r     | MKS   r     | PFM   r     | VNT   r
+      COS   r     | GIF   r/w   | MKV   r     | PGF   r     | VRD   r/w/c
+      CR2   r/w   | GLV   r/w   | MNG   r/w   | PGM   r/w   | VSD   r
+      CR3   r/w   | GPR   r/w   | MOBI  r     | PLIST r     | WAV   r
+      CRM   r/w   | GZ    r     | MODD  r     | PICT  r     | WDP   r/w
+      CRW   r/w   | HDP   r/w   | MOI   r     | PMP   r     | WEBP  r/w
+      CS1   r/w   | HDR   r     | MOS   r/w   | PNG   r/w   | WEBM  r
+      CSV   r     | HEIC  r/w   | MOV   r/w   | PPM   r/w   | WMA   r
+      CUR   r     | HEIF  r/w   | MP3   r     | PPT   r     | WMV   r
+      CZI   r     | HTML  r     | MP4   r/w   | PPTX  r     | WPG   r
+      DCM   r     | ICC   r/w/c | MPC   r     | PS    r/w   | WTV   r
+      DCP   r/w   | ICO   r     | MPG   r     | PSB   r/w   | WV    r
+      DCR   r     | ICS   r     | MPO   r/w   | PSD   r/w   | X3F   r/w
+      DFONT r     | IDML  r     | MQV   r/w   | PSP   r     | XCF   r
+      DIVX  r     | IIQ   r/w   | MRC   r     | QTIF  r/w   | XLS   r
+      DJVU  r     | IND   r/w   | MRW   r/w   | R3D   r     | XLSX  r
+      DLL   r     | INSP  r/w   | MXF   r     | RA    r     | XMP   r/w/c
+      DNG   r/w   | INSV  r     | NEF   r/w   | RAF   r/w   | ZIP   r
+      DOC   r     | INX   r     | NKSC  r/w   | RAM   r     |
+      DOCX  r     | ISO   r     | NRW   r/w   | RAR   r     |
 
       Meta Information
       ----------------------+----------------------+---------------------
@@ -4867,8 +4889,8 @@ OPTIONS
          may be used to conditionally delete or replace a tag (see "WRITING
          EXAMPLES" for examples). "^=" is used to write an empty string
          instead of deleting the tag when no *VALUE* is given, but otherwise
-         it is equivalent to "=", but note that the caret must be quoted on
-         the Windows command line.
+         it is equivalent to "=". (Note that the caret must be quoted on the
+         Windows command line.)
 
          *TAG* may contain one or more leading family 0, 1, 2 or 7 group
          names, prefixed by optional family numbers, and separated colons.
@@ -4939,7 +4961,8 @@ OPTIONS
          delete JPEG application segments which are not associated with
          another deletable group. For example, specifying "-APP14:All=" will
          NOT delete the APP14 "Adobe" segment because this is accomplished
-         with "-Adobe:All".
+         with "-Adobe:All". But note that these unnamed APP segments may not
+         be excluded with "--APPxx:all" when deleting all information.
 
          6) When shifting a value, the shift is applied to the original
          value of the tag, overriding any other values previously assigned
@@ -5581,7 +5604,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.62 --
+             -- Generated by ExifTool 12.65 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -6110,13 +6133,10 @@ OPTIONS
          Perl variables, if used, require a double "$", and regular
          expressions ending in $/ must use $$/ instead.
 
-         4) The condition may only test tags from the file being processed.
-         To process one file based on tags from another, two steps are
-         required. For example, to process XMP sidecar files in directory
-         "DIR" based on tags from the associated NEF:
-
-             exiftool -if EXPR -p '$directory/$filename' -ext nef DIR > nef.txt
-             exiftool -@ nef.txt -srcfile %d%f.xmp ...
+         4) The condition accesses only tags from the file being processed
+         unless the -fileNUM option is used to read an alternate file and
+         the corresponding family 8 group name is specified for the tag. See
+         the -fileNUM option details for more information.
 
          5) The -a option has no effect on the evaluation of the expression,
          and the values of duplicate tags are accessible only by specifying
@@ -6303,11 +6323,12 @@ OPTIONS
          When reading, causes information to be extracted from .gz and .bz2
          compressed images (only one image per archive; requires gzip and
          bzip2 to be available). When writing, causes compressed information
-         to be written if supported by the metadata format (eg. compressed
-         textual metadata in PNG), disables the recommended padding in
-         embedded XMP (saving 2424 bytes when writing XMP in a file), and
-         writes XMP in shorthand format -- the equivalent of setting the API
-         Compress=1 and Compact="NoPadding,Shorthand".
+         to be written if supported by the metadata format (eg. PNG supports
+         compressed textual metadata, JXL supports compressed EXIF and XML,
+         and MIE supports any compressed metadata), disables the recommended
+         padding in embedded XMP (saving 2424 bytes when writing XMP in a
+         file), and writes XMP in shorthand format -- the equivalent of
+         setting the API Compress=1 and Compact="NoPadding,Shorthand".
 
    Other options
     -@ *ARGFILE*
@@ -6507,12 +6528,13 @@ OPTIONS
     improve performance in multi-pass processing by reducing the overhead
     required to load exiftool for each invocation.
 
-    -api *OPT[[^]=[VAL]]*
+    -api [*OPT[[^]=[VAL]]*]
          Set ExifTool API option. *OPT* is an API option name. The option
          value is set to 1 if *=VAL* is omitted. If *VAL* is omitted, the
          option value is set to undef if "=" is used, or an empty string
-         with "^=". See Image::ExifTool Options for a list of available API
-         options. This overrides API options set via the config file.
+         with "^=". If *OPT* is not specified a list of available options is
+         returned. See Image::ExifTool Options for option details. This
+         overrides API options set via the config file.
 
     -common_args
          Specifies that all arguments following this option are common to
@@ -6762,6 +6784,15 @@ OPTIONS
         exiftool -sep "##" "-keywords<${keywords;NoDups(1)}" a.jpg
 
     Note that function names are case sensitive.
+
+    ExifTool 12.64 adds an API NoDups option which makes the NoDups helper
+    function largely redundant, with all the functionality except the
+    ability to avoid rewriting the file if there are no duplicates, but with
+    the advantage the duplicates may be removed when accumulating list items
+    from multiple sources. An equivalent to the above commands using this
+    feature would be:
+
+        exiftool -tagsfromfile @ -keywords -api nodups a.jpg
 
 WINDOWS UNICODE FILE NAMES
     In Windows, command-line arguments are specified using the current code

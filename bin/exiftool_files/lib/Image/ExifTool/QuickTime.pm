@@ -37,6 +37,7 @@
 #   25) https://cconcolato.github.io/mp4ra/atoms.html
 #   26) https://github.com/SamsungVR/android_upload_sdk/blob/master/SDKLib/src/main/java/com/samsung/msca/samsungvr/sdk/UserVideo.java
 #   27) https://exiftool.org/forum/index.php?topic=11517.0
+#   28) https://docs.mp3tag.de/mapping/
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::QuickTime;
@@ -47,7 +48,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '2.85';
+$VERSION = '2.87';
 
 sub ProcessMOV($$;$);
 sub ProcessKeys($$$);
@@ -223,6 +224,9 @@ my %ftypLookup = (
     'avif' => 'AV1 Image File Format (.AVIF)', # image/avif
     'crx ' => 'Canon Raw (.CRX)', #PH (CR3 or CRM; use Canon CompressorVersion to decide)
 );
+
+# use extension to determine file type
+my %useExt = ( GLV => 'MP4' );
 
 # information for int32u date/time tags (time zero is Jan 1, 1904)
 my %timeInfo = (
@@ -447,8 +451,8 @@ my %dupDirOK = ( ipco => 1, '----' => 1 );
 my %eeStd = ( stco => 'stbl', co64 => 'stbl', stsz => 'stbl', stz2 => 'stbl',
               stsc => 'stbl', stts => 'stbl' );
 
-# atoms required for generating ImageDataMD5
-my %md5Box = ( vide => { %eeStd }, soun => { %eeStd } );
+# atoms required for generating ImageDataHash
+my %hashBox = ( vide => { %eeStd }, soun => { %eeStd } );
 
 # boxes and their containers for the various handler types that we want to save
 # when the ExtractEmbedded is enabled (currently only the 'gps ' container name is
@@ -1006,7 +1010,8 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
             0 => 'Monoscopic',
             1 => 'Stereoscopic Top-Bottom',
             2 => 'Stereoscopic Left-Right',
-            3 => 'Stereoscopic Stereo-Custom', # (provisional in spec as of 2017-10-10)
+            3 => 'Stereoscopic Stereo-Custom',
+            4 => 'Stereoscopic Right-Left',
         },
     },
     sv3d => {
@@ -2070,8 +2075,8 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
         ValueConv => 'substr($val, 4)',
         ValueConvInv => '"\0\0\0\x01$val"',
     },
-    # hmtp - "\0\0\0\x01" followed by 408 bytes of zero
-    # vrin - "\0\0\0\x01" followed by 8 bytes of zero
+    # hmtp - 412 bytes: "\0\0\0\x01" then maybe "\0\0\0\x64" and the rest zeros
+    # vrin - 12 bytes: "\0\0\0\x01" followed by 8 bytes of zero
     # ---- GoPro ---- (ref PH)
     GoPr => 'GoProType', # (Hero3+)
     FIRM => { Name => 'FirmwareVersion', Avoid => 1 }, # (Hero4)
@@ -2867,6 +2872,25 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
         Name => 'AV1Configuration',
         SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::AV1Config' },
     },
+    clli => {
+        Name => 'ContentLightLevel',
+        SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::ContentLightLevel' },
+    },
+    # ref https://nokiatech.github.io/heif/technical.html
+    # cclv - Content Color Volume
+    # mdcv - Mastering Display Color Volume
+    # rrtp - Required reference types
+    # crtt - Creation time information
+    # mdft - Modification time information
+    # udes - User description
+    # altt - Accessibility text
+    # aebr - Auto exposure information
+    # wbbr - White balance information
+    # fobr - Focus information
+    # afbr - Flash exposure information
+    # dobr - Depth of field information
+    # pano - Panorama information
+    # iscl - Image Scaling
 );
 
 # ref https://aomediacodec.github.io/av1-spec/av1-spec.pdf
@@ -2901,8 +2925,8 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
                 1 => 'BT.709',
                 2 => 'Unspecified',
                 3 => 'For future use (3)',
-                4 => 'BT.470 System M (historical)',
-                5 => 'BT.470 System B, G (historical)',
+                4 => 'BT.470 System M (historical)',    # Gamma 2.2? (ref forum14960)
+                5 => 'BT.470 System B, G (historical)', # Gamma 2.8? (ref forum14960)
                 6 => 'BT.601',
                 7 => 'SMPTE 240 M',
                 8 => 'Linear',
@@ -3126,6 +3150,16 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
         RawConv => '$val & 0x10 ? undef : ($val & 0x0f) + 1',
         Unknown => 1,
     },
+);
+
+# ref https://android.googlesource.com/platform/frameworks/av/+/master/media/libstagefright/MPEG4Writer.cpp
+%Image::ExifTool::QuickTime::ContentLightLevel = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    GROUPS => { 2 => 'Video' },
+    FIRST_ENTRY => 0,
+    FORMAT => 'int16u',
+    0 => 'MaxContentLightLevel',
+    1 => 'MaxPicAverageLightLevel',
 );
 
 %Image::ExifTool::QuickTime::ItemRef = (
@@ -3363,8 +3397,9 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
     },
     albm => { Name => 'Album', Avoid => 1 }, #(ffmpeg source)
     apID => 'AppleStoreAccount',
-    atID => { #10 (or TV series)
-        Name => 'AlbumTitleID',
+    atID => {
+        # (ref 10 called this AlbumTitleID or TVSeries)
+        Name => 'ArtistID', #28 (or Track ID ref https://gist.github.com/maf654321/2b44c7b15d798f0c52ee)
         Format => 'int32u',
         Writable => 'int32s', #27
     },
@@ -3375,6 +3410,7 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
         Format => 'int32u',
         Writable => 'int32s', #27
     },
+    cmID => 'ComposerID', #28 (need sample to get format)
     cprt => { Name => 'Copyright', Groups => { 2 => 'Author' } },
     dscp => { Name => 'Description', Avoid => 1 },
     desc => { Name => 'Description', Avoid => 1 }, #7
@@ -6067,10 +6103,10 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
         PrintConv => { 0 => 'No', 1 => 'Yes' },
     },
     perf => 'Performer',
-    plID => { #10 (or TV season)
-        Name => 'PlayListID',
-        Format => 'int8u',  # actually int64u, but split it up
-        Count => 8,
+    plID => {
+        # (ref 10 called this PlayListID or TVSeason)
+        Name => 'AlbumID', #28
+        Format => 'int64u',
         Writable => 'int32s', #27
     },
     purd => 'PurchaseDate', #7
@@ -6532,6 +6568,7 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
     'rating.user'  => 'UserRating', # (Canon ELPH 510 HS)
     'collection.user' => 'UserCollection', #22
     'Encoded_With' => 'EncodedWith',
+    'content.identifier' => 'ContentIdentifier', #forum14874
 #
 # the following tags aren't in the com.apple.quicktime namespace:
 #
@@ -7187,7 +7224,7 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
 #
 #   AudioFormat  Offset  Child atoms
 #   -----------  ------  ----------------
-#   mp4a         52 *    wave, chan, esds, SA3D(Insta360 spherical video params?,also GoPro Max)
+#   mp4a         52 *    wave, chan, esds, SA3D(Insta360 spherical video params?,also GoPro Max and Garmin VIRB 360)
 #   in24         52      wave, chan
 #   "ms\0\x11"   52      wave
 #   sowt         52      chan
@@ -7220,11 +7257,14 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
     chan => {
         Name => 'AudioChannelLayout',
         SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::ChannelLayout' },
-    }
+    },
+    SA3D => { # written by Garmin VIRB360
+        Name => 'SpatialAudio',
+        SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::SpatialAudio' },
+    },
     # alac - 28 bytes
     # adrm - AAX DRM atom? 148 bytes
     # aabd - AAX unknown 17kB (contains 'aavd' strings)
-    # SA3D - written by Garmin VIRB360
 );
 
 # AMR decode config box (ref 3)
@@ -7570,6 +7610,20 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
         Format => 'float[3]',
     },
     # (arbitrarily decode only first 8 channels)
+);
+
+# spatial audio (ref https://github.com/google/spatial-media/blob/master/docs/spatial-audio-rfc.md)
+%Image::ExifTool::QuickTime::SpatialAudio = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    GROUPS => { 2 => 'Audio' },
+    NOTES => 'Spatial Audio tags.',
+    0 => 'SpatialAudioVersion',
+    1 => { Name => 'AmbisonicType', PrintConv => { 0 => 'Periphonic' } },
+    2 => { Name => 'AmbisonicOrder', Format => 'int32u' },
+    6 => { Name => 'AmbisonicChannelOrdering', PrintConv => { 0 => 'ACN' } },
+    7 => { Name => 'AmbisonicNormalization', PrintConv => { 0 => 'SN3D' } },
+    8 => { Name => 'AmbisonicChannels', Format => 'int32u' },
+    12 => { Name => 'AmbisonicChannelMap', Format => 'int32u[$val{8}]' },
 );
 
 # scheme type atom
@@ -8787,15 +8841,15 @@ sub HandleItemInfo($)
                     $et->VPrint(0, "$$et{INDENT}    [snip $snip bytes]\n") if $snip;
                 }
             }
-            # do MD5 checksum of AVIF "av01" and HEIC image data
-            if ($isImageData{$type} and $$et{ImageDataMD5}) {
-                my $md5 = $$et{ImageDataMD5};
+            # do hash of AVIF "av01" and HEIC image data
+            if ($isImageData{$type} and $$et{ImageDataHash}) {
+                my $hash = $$et{ImageDataHash};
                 my $tot = 0;
                 foreach $extent (@{$$item{Extents}}) {
                     $raf->Seek($$extent[1] + $base, 0) or $et->Warn("Seek error in $type image data"), last;
-                    $tot += $et->ImageDataMD5($raf, $$extent[2], "$type image", 1);
+                    $tot += $et->ImageDataHash($raf, $$extent[2], "$type image", 1);
                 }
-                $et->VPrint(0, "$$et{INDENT}(ImageDataMD5: $tot bytes of $type data)\n") if $tot;
+                $et->VPrint(0, "$$et{INDENT}(ImageDataHash: $tot bytes of $type data)\n") if $tot;
             }
             next unless $name;
             # assemble the data for this item
@@ -9285,6 +9339,9 @@ sub ProcessMOV($$;$)
                 }
             }
             $fileType or $fileType = 'MP4'; # default to MP4
+            # set file type from extension if appropriate
+            my $ext = $$et{FILE_EXT};
+            $fileType = $ext if $ext and $useExt{$ext} and $fileType eq $useExt{$ext};
             $et->SetFileType($fileType, $mimeLookup{$fileType} || 'video/mp4');
             # temporarily set ExtractEmbedded option for CRX files
             $saveOptions{ExtractEmbedded} = $et->Options(ExtractEmbedded => 1) if $fileType eq 'CRX';
@@ -9299,8 +9356,8 @@ sub ProcessMOV($$;$)
     $$raf{NoBuffer} = 1 if $fast;   # disable buffering in FastScan mode
 
     my $ee = $$et{OPTIONS}{ExtractEmbedded};
-    my $md5 = $$et{ImageDataMD5};
-    if ($ee or $md5) {
+    my $hash = $$et{ImageDataHash};
+    if ($ee or $hash) {
         $unkOpt = $$et{OPTIONS}{Unknown};
         require 'Image/ExifTool/QuickTimeStream.pl';
     }
@@ -9382,7 +9439,7 @@ sub ProcessMOV($$;$)
         # set flag to store additional information for ExtractEmbedded option
         my $handlerType = $$et{HandlerType};
         if ($eeBox{$handlerType} and $eeBox{$handlerType}{$tag}) {
-            if ($ee or $md5) {
+            if ($ee or $hash) {
                 # (there is another 'gps ' box with a track log that doesn't contain offsets)
                 if ($tag ne 'gps ' or $eeBox{$handlerType}{$tag} eq $dirID) {
                     $eeTag = 1;
@@ -9394,7 +9451,7 @@ sub ProcessMOV($$;$)
         } elsif ($ee and $ee > 1 and $eeBox2{$handlerType} and $eeBox2{$handlerType}{$tag}) {
             $eeTag = 1;
             $$et{OPTIONS}{Unknown} = 1;
-        } elsif ($md5 and $md5Box{$handlerType} and $md5Box{$handlerType}{$tag}) {
+        } elsif ($hash and $hashBox{$handlerType} and $hashBox{$handlerType}{$tag}) {
             $eeTag = 1;
             $$et{OPTIONS}{Unknown} = 1;
         }
@@ -9466,13 +9523,17 @@ sub ProcessMOV($$;$)
                 my $items = $$et{ItemInfo};
                 my ($id, $prop, $docNum, $lowest);
                 my $primary = $$et{PrimaryItem} || 0;
-ItemID:         foreach $id (keys %$items) {
+ItemID:         foreach $id (reverse sort { $a <=> $b } keys %$items) {
                     next unless $$items{$id}{Association};
                     my $item = $$items{$id};
                     foreach $prop (@{$$item{Association}}) {
                         next unless $prop == $index;
                         if ($id == $primary or (not $dontInherit{$tag} and
-                            (not $$item{RefersTo} or $$item{RefersTo}{$primary})))
+                            (($$item{RefersTo} and $$item{RefersTo}{$primary}) or
+                            # hack: assume Item 1 is from the main image (eg. hvc1 data)
+                            # to hack the case where the primary item (ie. main image)
+                            # doesn't directly reference this property
+                            (not $$item{RefersTo} and $id == 1))))
                         {
                             # this is associated with the primary item or an item describing
                             # the primary item, so consider this part of the main document
@@ -9483,7 +9544,7 @@ ItemID:         foreach $id (keys %$items) {
                             # this property is already associated with an item that has
                             # an ExifTool document number, so use the lowest associated DocNum
                             $docNum = $$item{DocNum} if not defined $docNum or $docNum > $$item{DocNum};
-                        } elsif (not defined $lowest or $lowest > $id) {
+                        } else {
                             # keep track of the lowest associated item ID
                             $lowest = $id;
                         }
@@ -9629,7 +9690,7 @@ ItemID:         foreach $id (keys %$items) {
                     }
                     if ($tag eq 'stbl') {
                         # process sample data when exiting SampleTable box if extracting embedded
-                        ProcessSamples($et) if $ee or $md5;
+                        ProcessSamples($et) if $ee or $hash;
                     } elsif ($tag eq 'minf') {
                         $$et{HandlerType} = ''; # reset handler type at end of media info box
                     }

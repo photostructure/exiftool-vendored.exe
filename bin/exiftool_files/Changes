@@ -7,11 +7,86 @@ RSS feed: https://exiftool.org/rss.xml
 Note: The most recent production release is Version 12.60. (Other versions are
 considered development releases, and are not uploaded to MetaCPAN.)
 
+Aug. 10, 2023 - Version 12.65
+
+  - Added a new QuickTime Keys tag
+  - Added a new CanonModelID (thanks Laurent Clevy)
+  - Added a new Canon LensType (thanks Norbert Wasser)
+  - Added number in brackets to converted Samsung MCCData value
+  - Decode a number of new Sony tags (thanks Jos Roost)
+  - Decode a few new FlashPix tags (github #217)
+  - Improved decoding of Nikon Z9 firmware 4.0 tags (thanks Warren Hatch)
+  - Improved parsing of PDF:Keywords to support semicolon-separated lists
+  - Enhanced -api option to show list of available options if no argument is
+    provided
+  - Lowered priority of IFD1 tags in ARW images so IFD0/SubIFD take precedence
+  - Changed QuickTime tag names for atID (AlbumTitleID to ArtistID) and plID
+    (PlayListID to AlbumID) (github issue #216), and added cmID (ComposerID)
+  - Changed Apple:MediaGroupUUID tag name back to ContentIdentifier
+  - Patched the -d option to handle the %s format code internally when writing
+    (avoids problems due to inconsistent behaviour of this format code in the
+    strptime function on different systems)
+  - Patched patch of version 12.32 to restore ability to read from named pipes
+  - Fixed bug which could cause a hang when processing a corrupt BigTIFF image
+  - Fixed document number for auxiliary image metadata in HEIC files
+  - Fixed misspelt Apple tag name (thanks Neal Krawetz)
+  - API Changes:
+      - Added AvailableOptions method
+
+June 28, 2023 - Version 12.64
+
+  - Added a new Sony LensType (thanks Jos Roost)
+  - Added config_files/guano.config to the distribution (thanks StarGeek)
+  - Added support for Garmin Low-resolution Video (GLV) files
+  - Added JUMBF to the list of deletable groups
+  - Added (untested) read support for spherical video tags in Matroska videos
+  - Decode a number of new Nikon Z9 tags (thanks Warren Hatch)
+  - Decode AmbisonicAudio tags in spherical MP4 vidoes
+  - Decode another Apple tag
+  - Improved French translations (thanks Philippe Bonnaure of GraphicConverter)
+  - Patched to allow writing QuickTime-based videos where the audio/video sample
+    description comes after the sample pointers
+  - Fixed parsing of GPS from Insta360 videos to properly skip void fixes
+  - Fixed problem where Apple iPhone 14 images produced invalid XML in -X output
+    when using -struct option
+  - API Changes:
+      - Added StructFormat option to allow JSON-format serialized structures
+      - Added NoDups option to eliminate duplicate items from queued values when
+        writing List-type tags
+
+June 8, 2023 - Version 12.63
+
+  - Added ability to read/write/create Brotli-compressed metadata in JXL images
+    (requires IO::Compress::Brotli)
+  - Added partial support for Exif 3.0 specification:
+      - Added new EXIF tags
+      - Added MPF Original Preservation Image type
+      - Support for reading 'utf8' values (but still write only as 'string')
+  - Added support for Adobe XMP-hdrgm (HDR Gain Map) tags
+  - Added support for reading 7z files (thanks Amir Gooran, github #205) (but
+    currently this doesn't work for the Windows .exe version because I haven't
+    been able to install Compress::Raw::Lzma for ActivePerl)
+  - Added XMP-panorama tags
+  - Added warning if -csv is used with -p
+  - Added warning if trying to geotag from a UTF-16 track log
+  - Decode ImageWidth/Height from JXL images using partial codestreams
+  - Decode more Sony tags for some newer models (thanks Jos Roost)
+  - Extract GainMapImage (hrgm box) from JXL files
+  - Extract Guano information from WAV files
+  - Enhanced ImageDataMD5 feature and renamed to ImageDataHash (with
+    ImageDataMD5 alias for backward compatibility)
+  - Changed RARVersion tag name to FileVersion
+  - Fixed bug introduced in 12.46 which could cause a hang when reading a
+    corrupted RIFF-based file
+  - Fixed writing of Composition:GPSPosition when -n is used
+  - API Changes:
+      - Added ImageHashType option
+
 May 3, 2023 - Version 12.62
 
   - Added basic read support for WPG images
   - Added ImageDataMD5 support for HEIC images
-  - Added support for RAR version 5.0 compressed files (thanks Amir Gooran)
+  - Added support for RAR version 5.0 files (thanks Amir Gooran, github #203)
   - Added a few new XMP-aux tags (thanks John Ellis)
   - Made Composite tags available for use in -fileNUM argument
   - Better handling of FlashPix VT_EMPTY value

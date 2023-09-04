@@ -29,7 +29,7 @@ use vars qw($VERSION $RELEASE @ISA @EXPORT_OK %EXPORT_TAGS $AUTOLOAD @fileTypes
             %jpegMarker %specialTags %fileTypeLookup $testLen $exeDir
             %static_vars);
 
-$VERSION = '12.62';
+$VERSION = '12.65';
 $RELEASE = '';
 @ISA = qw(Exporter);
 %EXPORT_TAGS = (
@@ -114,7 +114,7 @@ sub WriteTIFF($$$);
 sub PackUTF8(@);
 sub UnpackUTF8($);
 sub SetPreferredByteOrder($;$);
-sub ImageDataMD5($$$;$$);
+sub ImageDataHash($$$;$$);
 sub CopyBlock($$$);
 sub CopyFileAttrs($$$);
 sub TimeNow(;$$);
@@ -126,7 +126,7 @@ sub MakeTiffHeader($$$$;$$);
 sub SplitFileName($);
 sub EncodeFileName($$;$);
 sub Open($*$;$);
-sub Exists($$);
+sub Exists($$;$);
 sub IsDirectory($$);
 sub Rename($$$);
 sub Unlink($@);
@@ -194,7 +194,7 @@ $defaultLang = 'en';    # default language
                 PSD XMP BMP WPG BPG PPM RIFF AIFF ASF MOV MPEG Real SWF PSP FLV
                 OGG FLAC APE MPC MKV MXF DV PMP IND PGF ICC ITC FLIR FLIF FPF
                 LFP HTML VRD RTF FITS XCF DSS QTIF FPX PICT ZIP GZIP PLIST RAR
-                BZ2 CZI TAR  EXE EXR HDR CHM LNK WMF AVC DEX DPX RAW Font RSRC
+                7Z BZ2 CZI TAR EXE EXR HDR CHM LNK WMF AVC DEX DPX RAW Font RSRC
                 M2TS MacOS PHP PCX DCX DWF DWG DXF WTV Torrent VCard LRI R3D AA
                 PDB PFM2 MRC LIF JXL MOI ISO ALIAS JSON MP3 DICOM PCD ICO TXT);
 
@@ -228,6 +228,7 @@ my %createTypes = map { $_ => 1 } qw(XMP ICC MIE VRD DR4 EXIF EXV);
    '3GP' => ['MOV',  '3rd Gen. Partnership Project audio/video'],
    '3GP2'=>  '3G2',
    '3GPP'=>  '3GP',
+   '7Z'  => ['7Z', '7z archive'],
     A    => ['EXE',  'Static library'],
     AA   => ['AA',   'Audible Audiobook'],
     AAE  => ['PLIST','Apple edit information'],
@@ -329,6 +330,7 @@ my %createTypes = map { $_ => 1 } qw(XMP ICC MIE VRD DR4 EXIF EXV);
     FPF  => ['FPF',  'FLIR Public image Format'],
     FPX  => ['FPX',  'FlashPix'],
     GIF  => ['GIF',  'Compuserve Graphics Interchange Format'],
+    GLV  => ['MOV',  'Garmin Low-resolution Video'],
     GPR  => ['TIFF', 'General Purpose RAW'], # https://gopro.github.io/gpr/
     GZ   =>  'GZIP',
     GZIP => ['GZIP', 'GNU ZIP compressed archive'],
@@ -590,6 +592,7 @@ my %fileDescription = (
 #  types may be specified by some modules, eg. QuickTime.pm and RIFF.pm)
 %mimeType = (
    '3FR' => 'image/x-hasselblad-3fr',
+   '7Z'  => 'application/x-7z-compressed',
     AA   => 'audio/audible',
     AAE  => 'application/vnd.apple.photos',
     AI   => 'application/vnd.adobe.illustrator',
@@ -1047,6 +1050,93 @@ my %xmpShorthandOpt = ( 0 => 'None', 1 => 'Shorthand', 2 => ['Shorthand','OneDes
     macromanian => 'MacRomanian', cp10010 => 'MacRomanian',
     maciceland  => 'MacIceland',  cp10079 => 'MacIceland',
     maccroatian => 'MacCroatian', cp10082 => 'MacCroatian',
+);
+
+# list of available options
+# +-----------------------------------------------------+
+# ! DON'T FORGET!!  When adding any new option, must    !
+# ! decide how it is handled in SetNewValuesFromFile()  !
+# +-----------------------------------------------------+
+# (Note: All options must exist in this lookup, even if undefined,
+# to facilitate case-insensitive options. 'Group#' is handled specially)
+my @availableOptions = (
+    [ 'Binary',           undef,  'flag to extract binary values even if tag not specified' ],
+    [ 'ByteOrder',        undef,  'default byte order when creating EXIF information' ],
+    [ 'Charset',          'UTF8', 'character set for converting Unicode characters' ],
+    [ 'CharsetEXIF',      undef,  'internal EXIF "ASCII" string encoding' ],
+    [ 'CharsetFileName',  undef,  'external encoding for file names' ],
+    [ 'CharsetID3',       'Latin','internal ID3v1 character set' ],
+    [ 'CharsetIPTC',      'Latin','fallback IPTC character set if no CodedCharacterSet' ],
+    [ 'CharsetPhotoshop', 'Latin','internal encoding for Photoshop resource names' ],
+    [ 'CharsetQuickTime', 'MacRoman', 'internal QuickTime string encoding' ],
+    [ 'CharsetRIFF',      0,      'internal RIFF string encoding (0=default to Latin)' ],
+    [ 'Compact',          { },    'write compact XMP' ],
+    [ 'Composite',        1,      'flag to calculate Composite tags' ],
+    [ 'Compress',         undef,  'flag to write new values as compressed if possible' ],
+    [ 'CoordFormat',      undef,  'GPS lat/long coordinate format' ],
+    [ 'DateFormat',       undef,  'format for date/time' ],
+    [ 'Duplicates',       1,      'flag to save duplicate tag values' ],
+    [ 'Escape',           undef,  'escape special characters' ],
+    [ 'Exclude',          undef,  'tags to exclude' ],
+    [ 'ExtendedXMP',      1,      'strategy for reading extended XMP' ],
+    [ 'ExtractEmbedded',  undef,  'flag to extract information from embedded documents' ],
+    [ 'FastScan',         undef,  'flag to avoid scanning for trailer' ],
+    [ 'Filter',           undef,  'output filter for all tag values' ],
+    [ 'FilterW',          undef,  'input filter when writing tag values' ],
+    [ 'FixBase',          undef,  'fix maker notes base offsets' ],
+    [ 'GeoMaxIntSecs',    1800,   'geotag maximum interpolation time (secs)' ],
+    [ 'GeoMaxExtSecs',    1800,   'geotag maximum extrapolation time (secs)' ],
+    [ 'GeoMaxHDOP',       undef,  'geotag maximum HDOP' ],
+    [ 'GeoMaxPDOP',       undef,  'geotag maximum PDOP' ],
+    [ 'GeoMinSats',       undef,  'geotag minimum satellites' ],
+    [ 'GeoSpeedRef',      undef,  'geotag GPSSpeedRef' ],
+    [ 'GlobalTimeShift',  undef,  'apply time shift to all extracted date/time values' ],
+    [ 'Group#',           undef,  'return tags for specified groups in family #' ],
+    [ 'HexTagIDs',        0,      'use hex tag ID\'s in family 7 group names' ],
+    [ 'HtmlDump',         0,      'HTML dump (0-3, higher # = bigger limit)' ],
+    [ 'HtmlDumpBase',     undef,  'base address for HTML dump' ],
+    [ 'IgnoreMinorErrors',undef,  'ignore minor errors when reading/writing' ],
+    [ 'IgnoreTags',       undef,  'list of tags to ignore when extracting' ],
+    [ 'ImageHashType',    'MD5',  'image hash algorithm' ],
+    [ 'Lang',       $defaultLang, 'localized language for descriptions etc' ],
+    [ 'LargeFileSupport', undef,  'flag indicating support of 64-bit file offsets' ],
+    [ 'List',             undef,  '[deprecated, use ListSplit and ListJoin instead]' ],
+    [ 'ListItem',         undef,  'used to return a specific item from lists' ],
+    [ 'ListJoin',         ', ',   'join lists together with this separator' ],
+    [ 'ListSep',          ', ',   '[deprecated, use ListSplit and ListJoin instead]' ],
+    [ 'ListSplit',        undef,  'regex for splitting list-type tag values when writing' ],
+    [ 'MakerNotes',       undef,  'extract maker notes as a block' ],
+    [ 'MDItemTags',       undef,  'extract MacOS metadata item tags' ],
+    [ 'MissingTagValue',  undef,  'value for missing tags when expanded in expressions' ],
+    [ 'NoMultiExif',      undef,  'raise error when writing multi-segment EXIF' ],
+    [ 'NoPDFList',        undef,  'flag to avoid splitting PDF List-type tag values' ],
+    [ 'NoWarning',        undef,  'regular expression for warnings to suppress' ],
+    [ 'Password',         undef,  'password for password-protected PDF documents' ],
+    [ 'PrintConv',        1,      'flag to enable print conversion' ],
+    [ 'QuickTimeHandler', 1,      'flag to add mdir Handler to newly created Meta box' ],
+    [ 'QuickTimePad',     undef,  'flag to preserve padding of QuickTime CR3 tags' ],
+    [ 'QuickTimeUTC',     undef,  'assume that QuickTime date/time tags are stored as UTC' ],
+    [ 'RequestAll',       undef,  'extract all tags that must be specifically requested' ],
+    [ 'RequestTags',      undef,  'extra tags to request (on top of those in the tag list)' ],
+    [ 'SaveFormat',       undef,  'save family 6 tag TIFF format' ],
+    [ 'SavePath',         undef,  'save family 5 location path' ],
+    [ 'ScanForXMP',       undef,  'flag to scan for XMP information in all files' ],
+    [ 'Sort',             'Input','order to sort found tags (Input, File, Tag, Descr, Group#)' ],
+    [ 'Sort2',            'File', 'secondary sort order for tags in a group (File, Tag, Descr)' ],
+    [ 'StrictDate',       undef,  'flag to return undef for invalid date conversions' ],
+    [ 'Struct',           undef,  'return structures as hash references' ],
+    [ 'StructFormat',     undef,  'format for structure serialization when reading/writing' ],
+    [ 'SystemTags',       undef,  'extract additional File System tags' ],
+    [ 'TextOut',        \*STDOUT, 'file for Verbose/HtmlDump output' ],
+    [ 'TimeZone',         undef,  'local time zone' ],
+    [ 'Unknown',          0,      'flag to get values of unknown tags (0-2)' ],
+    [ 'UserParam',        { },    'user parameters for additional user-defined tag values' ],
+    [ 'Validate',         undef,  'perform additional validation' ],
+    [ 'Verbose',          0,      'print verbose messages (0-5, higher # = more verbose)' ],
+    [ 'WriteMode',        'wcg',  'enable all write modes by default' ],
+    [ 'XAttrTags',        undef,  'extract MacOS extended attribute tags' ],
+    [ 'XMPAutoConv',      1,      'automatic conversion of unknown XMP tag values' ],
+    [ 'XMPShorthand',     0,      '[deprecated, use Compact=Shorthand instead]' ],
 );
 
 # default family 0 group priority for writing
@@ -1827,15 +1917,17 @@ my %systemTagsNotes = (
             if specifically requested
         },
     },
-    ImageDataMD5 => {
+    ImageDataHash => {
         Notes => q{
-            MD5 of image data. Generated only if specifically requested for JPEG, TIFF,
+            Hash of image data. Generated only if specifically requested for JPEG, TIFF,
             PNG, CRW, CR3, MRW, RAF, X3F, IIQ, JP2, JXL, HEIC and AVIF images, MOV/MP4
-            videos, and some RIFF-based files such as AVI, WAV and WEBP.  The MD5
-            includes the main image data, plus JpgFromRaw/OtherImage for some formats,
-            but does not include ThumbnailImage or PreviewImage.  Includes video and
-            audio data for MOV/MP4. The L<XMP-et:OriginalImageMD5 tag|XMP.html#ExifTool>
-            provides a place to store these values in the file.
+            videos, and some RIFF-based files such as AVI, WAV and WEBP.  The hash
+            algorithm is set by the API L<ImageHashType|../ExifTool.html#ImageHashType> option, and is 'MD5' by default.
+            The hash includes the main image data, plus JpgFromRaw/OtherImage for some
+            formats, but does not include ThumbnailImage or PreviewImage.  Includes
+            video and audio data for MOV/MP4.  The L<XMP-et:OriginalImageHash and
+            XMP-et:OriginalImageHashType tags|XMP.html#ExifTool> provide a way to store
+            the this hash value and the hash type in the file.
         },
     },
 );
@@ -2314,6 +2406,18 @@ sub Options($$;@)
                 $newVal = defined $newVal ? "$oldVal|$newVal" : $oldVal;
             }
             $$options{$param} = $newVal;
+        } elsif ($param eq 'ImageHashType') {
+            if (defined $newVal and $newVal =~ /^(MD5|SHA256|SHA512)$/i) {
+                $$options{$param} = uc($newVal);
+            } else {
+                warn("Invalid $param setting '${newVal}'\n"), return $oldVal;
+            }
+        } elsif ($param eq 'StructFormat') {
+            if (defined $newVal) {
+                $newVal =~ /^(JSON|JSONQ)$/i or warn("Invalid $param setting '${newVal}'\n"), return $oldVal;
+                $newVal = uc($newVal);
+            }
+            $$options{$param} = $newVal;
         } else {
             if ($param eq 'Escape') {
                 # set ESCAPE_PROC
@@ -2351,90 +2455,11 @@ sub ClearOptions($)
     local $_;
     my $self = shift;
 
-    # create options hash with default values
-    # +-----------------------------------------------------+
-    # ! DON'T FORGET!!  When adding any new option, must    !
-    # ! decide how it is handled in SetNewValuesFromFile()  !
-    # +-----------------------------------------------------+
-    # (Note: All options must exist in this lookup, even if undefined,
-    # to facilitate case-insensitive options. 'Group#' is handled specially)
-    $$self{OPTIONS} = {
-        Binary      => undef,   # flag to extract binary values even if tag not specified
-        ByteOrder   => undef,   # default byte order when creating EXIF information
-        Charset     => 'UTF8',  # character set for converting Unicode characters
-        CharsetEXIF => undef,   # internal EXIF "ASCII" string encoding
-        CharsetFileName => undef,   # external encoding for file names
-        CharsetID3  => 'Latin', # internal ID3v1 character set
-        CharsetIPTC => 'Latin', # fallback IPTC character set if no CodedCharacterSet
-        CharsetPhotoshop => 'Latin', # internal encoding for Photoshop resource names
-        CharsetQuickTime => 'MacRoman', # internal QuickTime string encoding
-        CharsetRIFF => 0,       # internal RIFF string encoding (0=default to Latin)
-        Compact     => { },     # write compact XMP
-        Composite   => 1,       # flag to calculate Composite tags
-        Compress    => undef,   # flag to write new values as compressed if possible
-        CoordFormat => undef,   # GPS lat/long coordinate format
-        DateFormat  => undef,   # format for date/time
-        Duplicates  => 1,       # flag to save duplicate tag values
-        Escape      => undef,   # escape special characters
-        Exclude     => undef,   # tags to exclude
-        ExtendedXMP => 1,       # strategy for reading extended XMP
-        ExtractEmbedded =>undef,# flag to extract information from embedded documents
-        FastScan    => undef,   # flag to avoid scanning for trailer
-        Filter      => undef,   # output filter for all tag values
-        FilterW     => undef,   # input filter when writing tag values
-        FixBase     => undef,   # fix maker notes base offsets
-        GeoMaxIntSecs => 1800,  # geotag maximum interpolation time (secs)
-        GeoMaxExtSecs => 1800,  # geotag maximum extrapolation time (secs)
-        GeoMaxHDOP  => undef,   # geotag maximum HDOP
-        GeoMaxPDOP  => undef,   # geotag maximum PDOP
-        GeoMinSats  => undef,   # geotag minimum satellites
-        GeoSpeedRef => undef,   # geotag GPSSpeedRef
-        GlobalTimeShift => undef,   # apply time shift to all extracted date/time values
-    #   Group#      => undef,   # return tags for specified groups in family #
-        HexTagIDs   => 0,       # use hex tag ID's in family 7 group names
-        HtmlDump    => 0,       # HTML dump (0-3, higher # = bigger limit)
-        HtmlDumpBase => undef,  # base address for HTML dump
-        IgnoreMinorErrors => undef, # ignore minor errors when reading/writing
-        IgnoreTags  => undef,   # list of tags to ignore when extracting
-        Lang        => $defaultLang,# localized language for descriptions etc
-        LargeFileSupport => undef,  # flag indicating support of 64-bit file offsets
-        List        => undef,   # extract lists of PrintConv values into arrays [no longer documented]
-        ListItem    => undef,   # used to return a specific item from lists
-        ListJoin    => ', ',    # join lists together with this separator
-        ListSep     => ', ',    # list item separator [no longer documented]
-        ListSplit   => undef,   # regex for splitting list-type tag values when writing
-        MakerNotes  => undef,   # extract maker notes as a block
-        MDItemTags  => undef,   # extract MacOS metadata item tags
-        MissingTagValue =>undef,# value for missing tags when expanded in expressions
-        NoMultiExif => undef,   # raise error when writing multi-segment EXIF
-        NoPDFList   => undef,   # flag to avoid splitting PDF List-type tag values
-        NoWarning   => undef,   # regular expression for warnings to suppress
-        Password    => undef,   # password for password-protected PDF documents
-        PrintConv   => 1,       # flag to enable print conversion
-        QuickTimeHandler => 1,  # flag to add mdir Handler to newly created Meta box
-        QuickTimePad=> undef,   # flag to preserve padding of QuickTime CR3 tags
-        QuickTimeUTC=> undef,   # assume that QuickTime date/time tags are stored as UTC
-        RequestAll  => undef,   # extract all tags that must be specifically requested
-        RequestTags => undef,   # extra tags to request (on top of those in the tag list)
-        SaveFormat  => undef,   # save family 6 tag TIFF format
-        SavePath    => undef,   # save family 5 location path
-        ScanForXMP  => undef,   # flag to scan for XMP information in all files
-        Sort        => 'Input', # order to sort found tags (Input, File, Tag, Descr, Group#)
-        Sort2       => 'File',  # secondary sort order for tags in a group (File, Tag, Descr)
-        StrictDate  => undef,   # flag to return undef for invalid date conversions
-        Struct      => undef,   # return structures as hash references
-        SystemTags  => undef,   # extract additional File System tags
-        TextOut     => \*STDOUT,# file for Verbose/HtmlDump output
-        TimeZone    => undef,   # local time zone
-        Unknown     => 0,       # flag to get values of unknown tags (0-2)
-        UserParam   => { },     # user parameters for additional user-defined tag values
-        Validate    => undef,   # perform additional validation
-        Verbose     => 0,       # print verbose messages (0-5, higher # = more verbose)
-        WriteMode   => 'wcg',   # enable all write modes by default
-        XAttrTags   => undef,   # extract MacOS extended attribute tags
-        XMPAutoConv => 1,       # automatic conversion of unknown XMP tag values
-        XMPShorthand=> 0,       # (unused, but needed for backward compatibility)
-    };
+    $$self{OPTIONS} = { };  # clear all options
+
+    # load default options
+    $$self{OPTIONS}{$$_[0]} = $$_[1] foreach @availableOptions;
+
     # keep necessary member variables in sync with options
     delete $$self{CUR_LANG};
     delete $$self{ESCAPE_PROC};
@@ -2518,10 +2543,17 @@ sub ExtractInfo($;@)
             }
         }
         
-        # create MD5 object if ImageDataMD5 is requested
-        if ($$req{imagedatamd5} and not $$self{ImageDataMD5}) {
-            if (require Digest::MD5) {
-                $$self{ImageDataMD5} = Digest::MD5->new;
+        # create Hash object if ImageDataHash is requested
+        if ($$req{imagedatahash} and not $$self{ImageDataHash}) {
+            my $imageHashType = $self->Options('ImageHashType');
+            if ($imageHashType =~ /^SHA(256|512)$/i) {
+                if (require Digest::SHA) {
+                    $$self{ImageDataHash} = Digest::SHA->new($1);
+                } else {
+                    $self->WarnOnce("Install Digest::SHA to calculate image data SHA$1");
+                }
+            } elsif (require Digest::MD5) {
+                $$self{ImageDataHash} = Digest::MD5->new;
             } else {
                 $self->WarnOnce('Install Digest::MD5 to calculate image data MD5');
             }
@@ -2915,10 +2947,13 @@ sub ExtractInfo($;@)
         # restore necessary members when exiting re-entrant code
         $$self{$_} = $$reEntry{$_} foreach keys %$reEntry;
         SetByteOrder($saveOrder);
-    } elsif ($$self{ImageDataMD5}) {
-        my $digest = $$self{ImageDataMD5}->hexdigest;
+    } elsif ($$self{ImageDataHash}) {
+        my $digest = $$self{ImageDataHash}->hexdigest;
         # (don't store empty digest)
-        $self->FoundTag(ImageDataMD5 => $digest) unless $digest eq 'd41d8cd98f00b204e9800998ecf8427e';
+        $self->FoundTag(ImageDataHash => $digest) unless
+            $digest eq 'd41d8cd98f00b204e9800998ecf8427e' or
+            $digest eq 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' or
+            $digest eq 'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e';
     }
 
     # ($type may be undef without an Error when processing sub-documents)
@@ -3862,6 +3897,15 @@ sub GetCompositeTagInfo($)
 }
 
 #------------------------------------------------------------------------------
+# Return List ExifTool API options
+# Returns: 0) reference to list of available options -- each entry is a list
+#            [0=option name, 1=default value, 2=description]
+sub AvailableOptions()
+{
+    return \@availableOptions;
+}
+
+#------------------------------------------------------------------------------
 # Get tag name (removes copy index)
 # Inputs: 0) Tag key
 # Returns: Tag name
@@ -4345,11 +4389,11 @@ sub Open($*$;$)
 
 #------------------------------------------------------------------------------
 # Check to see if a file exists (with Windows Unicode support)
-# Inputs: 0) ExifTool ref, 1) file name
+# Inputs: 0) ExifTool ref, 1) file name, 2) flag if we are writing this file
 # Returns: true if file exists
-sub Exists($$)
+sub Exists($$;$)
 {
-    my ($self, $file) = @_;
+    my ($self, $file, $writing) = @_;
 
     if ($self->EncodeFileName($file)) {
         local $SIG{'__WARN__'} = \&SetWarning;
@@ -4359,10 +4403,12 @@ sub Exists($$)
                         Win32API::File::OPEN_EXISTING(), 0, []) };
         return 0 unless $wh;
         eval { Win32API::File::CloseHandle($wh) };
-    } else {
+    } elsif ($writing) {
         # (named pipes already exist, but we pretend that they don't
         #  so we will be able to write them, so test with for pipe -p)
         return(-e $file and not -p $file);
+    } else {
+        return(-e $file);
     }
     return 1;
 }
@@ -4865,6 +4911,7 @@ sub SetFoundTags($)
                 $groupList = [ $$options{$groupOpt} ];
             }
             foreach (@$groupList) {
+                next unless defined $_;
                 # groups have priority in order they were specified
                 ++$wantOrder;
                 my ($groupName, $want);
@@ -5582,6 +5629,7 @@ my %formatSize = (
     ifd => 4,
     ifd64 => 8,
     ue7 => 1,
+    utf8 => 1, # (Exif 3.0)
 );
 my %readValueProc = (
     int8s => \&Get8s,
@@ -5796,7 +5844,8 @@ sub MakeTagName($)
     my $name = shift;
     $name =~ tr/-_a-zA-Z0-9//dc;    # remove illegal characters
     $name = ucfirst $name;          # capitalize first letter
-    $name = "Tag$name" if length($name) < 2; # must at least 2 characters long
+    $name = "Tag$name" if length($name) < 2 or $name =~ /^[-0-9]/;
+    # must at least 2 characters long and not start with - or 0-9-
     return $name;
 }
 
@@ -6487,15 +6536,15 @@ sub ProcessJPEG($$)
     my $req = $$self{REQ_TAG_LOOKUP};
     my $htmlDump = $$self{HTML_DUMP};
     my %dumpParms = ( Out => $out );
-    my ($ch, $s, $length, $md5, $md5size);
+    my ($ch, $s, $length, $hash, $hashsize);
     my ($success, $wantTrailer, $trailInfo, $foundSOS, $gotSize, %jumbfChunk);
     my (@iccChunk, $iccChunkCount, $iccChunksTotal, @flirChunk, $flirCount, $flirTotal);
     my ($preview, $scalado, @dqt, $subSampling, $dumpEnd, %extendedXMP);
 
-    # get pointer to MD5 object if it exists and we are the top-level JPEG or JP2
+    # get pointer to hash object if it exists and we are the top-level JPEG or JP2
     if ($$self{FILE_TYPE} =~ /^(JPEG|JP2)$/ and not $$self{DOC_NUM}) {
-        $md5 = $$self{ImageDataMD5};
-        $md5size = 0;
+        $hash = $$self{ImageDataHash};
+        $hashsize = 0;
     }
 
     # check to be sure this is a valid JPG (or J2C, or EXV) file
@@ -6544,7 +6593,7 @@ sub ProcessJPEG($$)
 #
 # read ahead to the next segment unless we have reached EOI, SOS or SOD
 #
-        unless ($marker and ($marker==0xd9 or ($marker==0xda and not $wantTrailer and not $md5) or
+        unless ($marker and ($marker==0xd9 or ($marker==0xda and not $wantTrailer and not $hash) or
             $marker==0x93))
         {
             # read up to next marker (JPEG markers begin with 0xff)
@@ -6576,19 +6625,19 @@ sub ProcessJPEG($$)
                 $nextSegPos = $raf->Tell();
                 $len -= 4;  # subtract size of length word
                 last unless $raf->Seek($len, 1);
-            } elsif ($md5 and defined $marker and ($marker == 0x00 or $marker == 0xda or
+            } elsif ($hash and defined $marker and ($marker == 0x00 or $marker == 0xda or
                 ($marker >= 0xd0 and $marker <= 0xd7)))
             {
-                # calculate MD5 for image data (includes leading ff d9 but not trailing ff da)
-                $md5->add("\xff" . chr($marker));
+                # calculate hash for image data (includes leading ff d9 but not trailing ff da)
+                $hash->add("\xff" . chr($marker));
                 my $n = $skipped - (length($buff) - 1); # number of extra 0xff's
                 if (not $n) {
                     $buff = substr($buff, 0, -1);       # remove trailing 0xff
                 } elsif ($n > 1) {
                     $buff .= "\xff" x ($n - 1);         # add back extra 0xff's
                 }
-                $md5->add($buff);
-                $md5size += $skipped + 2;
+                $hash->add($buff);
+                $hashsize += $skipped + 2;
             }
             # read second segment too if this was the first
             next unless defined $marker;
@@ -6800,7 +6849,7 @@ sub ProcessJPEG($$)
                 next if $trailInfo or $wantTrailer or $verbose > 2 or $htmlDump;
             }
             # must scan to EOI if Validate or JpegCompressionFactor used
-            next if $$options{Validate} or $calcImageLen or $$req{trailer} or $md5;
+            next if $$options{Validate} or $calcImageLen or $$req{trailer} or $hash;
             # nothing interesting to parse after start of scan (SOS)
             $success = 1;
             last;   # all done parsing file
@@ -6808,9 +6857,9 @@ sub ProcessJPEG($$)
             pop @$path;
             $verbose and print $out "JPEG SOD\n";
             $success = 1;
-            if ($md5 and $$self{FILE_TYPE} eq 'JP2') {
+            if ($hash and $$self{FILE_TYPE} eq 'JP2') {
                 my $pos = $raf->Tell();
-                $self->ImageDataMD5($raf, undef, 'SOD');
+                $self->ImageDataHash($raf, undef, 'SOD');
                 $raf->Seek($pos, 0);
             }
             next if $verbose > 2 or $htmlDump;
@@ -6829,7 +6878,7 @@ sub ProcessJPEG($$)
             or ($$options{RequestAll} and $$options{RequestAll} > 2)))
         {
             my $num = unpack('C',$$segDataPt) & 0x0f;   # get table index
-            $dqt[$num] = $$segDataPt if $num < 4;       # save for MD5 calculation
+            $dqt[$num] = $$segDataPt if $num < 4;       # save for hash calculation
         }
         # handle all other markers
         my $dumpType = '';
@@ -7177,9 +7226,6 @@ sub ProcessJPEG($$)
                     $self->HandleTag($tagTablePtr, 'APP3', $$dataPt);
                     undef $combinedSegData;
                 }
-            } elsif ($$self{HasIJPEG}) {
-                $dumpType = 'InfiRay Data',
-                
             } elsif ($$segDataPt =~ /^\xff\xd8\xff\xdb/) {
                 $dumpType = 'PreviewImage'; # (Samsung, HP, BenQ)
                 $preview = $$segDataPt;
@@ -7612,8 +7658,8 @@ sub ProcessJPEG($$)
             delete $extendedXMP{$guid};
         }
     }
-    # print verbose MD5 message if necessary
-    print $out "$$self{INDENT}(ImageDataMD5: $md5size bytes of JPEG image data)\n" if $md5size and $verbose;
+    # print verbose hash message if necessary
+    print $out "$$self{INDENT}(ImageDataHash: $hashsize bytes of JPEG image data)\n" if $hashsize and $verbose;
     # calculate JPEGDigest if requested
     if (@dqt) {
         require Image::ExifTool::JPEGDigest;
@@ -7808,6 +7854,8 @@ sub DoProcessTIFF($$;$)
                     return 1;
                 }
             }
+        } elsif ($fileType eq 'ARW') {
+            $$self{LOW_PRIORITY_DIR}{IFD1} = 1; # lower priority of IFD1 tags in ARW files
         }
         # we have a valid TIFF (or whatever) file
         if ($fileType and not $$self{VALUE}{FileType}) {
@@ -7889,8 +7937,8 @@ sub DoProcessTIFF($$;$)
         if ($$self{TIFF_TYPE} eq 'TIFF') {
             $self->FoundTag(PageCount => $$self{PageCount}) if $$self{MultiPage};
         }
-        if ($$self{ImageDataMD5} and $$self{A100DataOffset} and $raf->Seek($$self{A100DataOffset},0)) {
-            $self->ImageDataMD5($raf, undef, 'A100');
+        if ($$self{ImageDataHash} and $$self{A100DataOffset} and $raf->Seek($$self{A100DataOffset},0)) {
+            $self->ImageDataHash($raf, undef, 'A100');
         }
         return 1;
     }

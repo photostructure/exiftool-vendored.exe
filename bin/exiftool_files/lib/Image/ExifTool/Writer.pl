@@ -139,7 +139,7 @@ my @delGroups = qw(
     Adobe AFCP APP0 APP1 APP2 APP3 APP4 APP5 APP6 APP7 APP8 APP9 APP10 APP11
     APP12 APP13 APP14 APP15 CanonVRD CIFF Ducky EXIF ExifIFD File FlashPix
     FotoStation GlobParamIFD GPS ICC_Profile IFD0 IFD1 Insta360 InteropIFD IPTC
-    ItemList JFIF Jpeg2000 Keys MakerNotes Meta MetaIFD Microsoft MIE MPF
+    ItemList JFIF Jpeg2000 JUMBF Keys MakerNotes Meta MetaIFD Microsoft MIE MPF
     NikonApp NikonCapture PDF PDF-update PhotoMechanic Photoshop PNG PNG-pHYs
     PrintIM QuickTime RMETA RSRC SubIFD Trailer UserData XML XML-* XMP XMP-*
 );
@@ -1028,7 +1028,7 @@ TAG: foreach $tagInfo (@matchingTags) {
                         foreach (@vals) {
                             if (ref $_ eq 'HASH') {
                                 require 'Image/ExifTool/XMPStruct.pl';
-                                $_ = Image::ExifTool::XMP::SerializeStruct($_);
+                                $_ = Image::ExifTool::XMP::SerializeStruct($self, $_);
                             }
                             print $out "$$self{INDENT2}$verb $wgrp1:$tag$fromList if value is '${_}'\n";
                         }
@@ -1293,6 +1293,7 @@ sub SetNewValuesFromFile($$;@)
         HexTagIDs       => $$options{HexTagIDs},
         IgnoreMinorErrors=>$$options{IgnoreMinorErrors},
         IgnoreTags      => $$options{IgnoreTags},
+        ImageHashType   => $$options{ImageHashType},
         Lang            => $$options{Lang},
         LargeFileSupport=> $$options{LargeFileSupport},
         List            => 1,
@@ -1313,6 +1314,7 @@ sub SetNewValuesFromFile($$;@)
         ScanForXMP      => $$options{ScanForXMP},
         StrictDate      => defined $$options{StrictDate} ? $$options{StrictDate} : 1,
         Struct          => $structOpt,
+        StructFormat    => $$options{StructFormat},
         SystemTags      => $$options{SystemTags},
         TimeZone        => $$options{TimeZone},
         Unknown         => $$options{Unknown},
@@ -1763,7 +1765,14 @@ GNV_TagInfo:    foreach $tagInfo (@tagInfoList) {
         }
     }
     # return our value(s)
-    return @$vals if wantarray;
+    if (wantarray) {
+        # remove duplicates if requested
+        if (@$vals > 1 and $self->Options('NoDups')) {
+            my %seen;
+            @$vals = grep { !$seen{$_}++ } @$vals;
+        }
+        return @$vals;
+    }
     return $$vals[0];
 }
 
@@ -2016,7 +2025,7 @@ sub SetFileName($$;$$$)
     # protect against empty file name
     length $newName or $self->Warn('New file name is empty'), return -1;
     # don't replace existing file
-    if ($self->Exists($newName) and (not defined $usedFlag or $usedFlag)) {
+    if ($self->Exists($newName, 1) and (not defined $usedFlag or $usedFlag)) {
         if ($file ne $newName or $opt =~ /Link$/) {
             # allow for case-insensitive filesystem
             if ($opt =~ /Link$/ or not $self->IsSameFile($file, $newName)) {
@@ -2395,7 +2404,7 @@ sub WriteInfo($$;$$)
         $outBuff = '';
         $outRef = \$outBuff;
         $outPos = 0;
-    } elsif ($self->Exists($outfile)) {
+    } elsif ($self->Exists($outfile, 1)) {
         $self->Error("File already exists: $outfile");
     } elsif ($self->Open(\*EXIFTOOL_OUTFILE, $outfile, '>')) {
         $outRef = \*EXIFTOOL_OUTFILE;
@@ -3283,7 +3292,7 @@ sub InsertTagValues($$$;$$$)
                 }
             } elsif (ref $val eq 'HASH') {
                 require 'Image/ExifTool/XMPStruct.pl';
-                $val = Image::ExifTool::XMP::SerializeStruct($val);
+                $val = Image::ExifTool::XMP::SerializeStruct($self, $val);
             } elsif (not defined $val) {
                 $val = $$self{OPTIONS}{MissingTagValue} if $asList;
             }
@@ -3767,6 +3776,8 @@ sub GetNewValueHash($$;$$$$)
         # this is a bit tricky:  we want to add to a protected nvHash only if we
         # are adding a conditional delete ($_[5] true or DelValue with no Shift)
         # or accumulating List items (NoReplace true)
+        # (NOTE: this should be looked into --> lists may be accumulated instead of being replaced
+        # as expected when copying to the same list from different dynamic -tagsFromFile source files)
         if ($protect and not ($opts{create} and ($$nvHash{NoReplace} or $_[5] or
             ($$nvHash{DelValue} and not defined $$nvHash{Shift}))))
         {
@@ -4908,6 +4919,11 @@ sub InverseDateTime($$;$$)
         my $fs = ($fmt =~ s/%f$// and $val =~ s/(\.\d+)\s*$//) ? $1 : '';
         my ($lib, $wrn, @a);
 TryLib: for ($lib=$strptimeLib; ; $lib='') {
+            # handle %s format ourself (not supported in Fedora, see forum15032)
+            if ($fmt eq '%s') {
+                $val = ConvertUnixTime($val, 1);
+                last;
+            }
             if (not $lib) {
                 last unless $$self{OPTIONS}{StrictDate};
                 warn $wrn || "Install POSIX::strptime or Time::Piece for inverse date/time conversions\n";
@@ -5598,6 +5614,8 @@ sub WriteJPEG($$)
                     $s =~ /^(Meta|META|Exif)\0\0/ and $dirName = 'Meta';
                 } elsif ($marker == 0xe5) {
                     $s =~ /^RMETA\0/        and $dirName = 'RMETA';
+                } elsif ($marker == 0xeb) {
+                    $s =~ /^JP/             and $dirName = 'JUMBF';
                 } elsif ($marker == 0xec) {
                     $s =~ /^Ducky/          and $dirName = 'Ducky';
                 } elsif ($marker == 0xed) {
@@ -6463,6 +6481,11 @@ sub WriteJPEG($$)
                     $segType = 'Ricoh RMETA';
                     $$delGroup{RMETA} and $del = 1;
                 }
+            } elsif ($marker == 0xeb) {         # APP10 (JUMBF)
+                if ($$segDataPt =~ /^JP/) {
+                    $segType = 'JUMBF';
+                    $$delGroup{JUMBF} and $del = 1;
+                }
             } elsif ($marker == 0xec) {         # APP12 (Ducky)
                 if ($$segDataPt =~ /^Ducky/) {
                     $segType = 'Ducky';
@@ -6880,14 +6903,14 @@ sub SetFileTime($$;$$$$)
 }
 
 #------------------------------------------------------------------------------
-# Add data to MD5 checksum
+# Add data to hash checksum
 # Inputs: 0) ExifTool ref, 1) RAF ref, 2) data size (or undef to read to end of file),
 #         3) data name (or undef for no warnings or messages), 4) flag for no verbose message
-# Returns: number of bytes read and MD5'd
-sub ImageDataMD5($$$;$$)
+# Returns: number of bytes read and hashed
+sub ImageDataHash($$$;$$)
 {
     my ($self, $raf, $size, $type, $noMsg) = @_;
-    my $md5 = $$self{ImageDataMD5} or return;
+    my $hash = $$self{ImageDataHash} or return;
     my ($bytesRead, $n) = (0, 65536);
     my $buff;
     for (;;) {
@@ -6900,11 +6923,11 @@ sub ImageDataMD5($$$;$$)
             $self->Warn("Error reading $type data") if $type and defined $size;
             last;
         }
-        $md5->add($buff);
+        $hash->add($buff);
         $bytesRead += length $buff;
     }
     if ($$self{OPTIONS}{Verbose} and $bytesRead and $type and not $noMsg) {
-        $self->VPrint(0, "$$self{INDENT}(ImageDataMD5: $bytesRead bytes of $type data)\n");
+        $self->VPrint(0, "$$self{INDENT}(ImageDataHash: $bytesRead bytes of $type data)\n");
     }
     return $bytesRead;
 }
