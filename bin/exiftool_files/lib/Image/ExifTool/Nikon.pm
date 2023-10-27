@@ -65,7 +65,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 use Image::ExifTool::XMP;
 
-$VERSION = '4.25';
+$VERSION = '4.27';
 
 sub LensIDConv($$$);
 sub ProcessNikonAVI($$$);
@@ -676,6 +676,7 @@ sub GetAFPointGrid($$;$);
     '07 40 30 45 2D 35 03 02.2' => 'Voigtlander Ultragon 19-35mm F3.5-4.5 VMV', #NJ
     '71 48 64 64 24 24 00 00' => 'Voigtlander APO-Skopar 90mm F2.8 SL IIs', #30
     'FD 00 50 50 18 18 DF 00' => 'Voigtlander APO-Lanthar 50mm F2 Aspherical', #35
+    'FD 00 44 44 18 18 DF 00' => 'Voigtlander APO-Lanthar 35mm F2', #30
 #
     '00 40 2D 2D 2C 2C 00 00' => 'Carl Zeiss Distagon T* 3.5/18 ZF.2',
     '00 48 27 27 24 24 00 00' => 'Carl Zeiss Distagon T* 2.8/15 ZF.2', #MykytaKozlov
@@ -1188,6 +1189,7 @@ my %subjectDetectionZ9 = (
     2 => 'People',
     3 => 'Animals',
     4 => 'Vehicles',
+    5 => 'Birds',
     6 => 'Airplanes',
 );
 
@@ -2421,8 +2423,8 @@ my %base64coord = (
             },
         },
         { # (Z6_2 firmware version 1.00 and Z7II firmware versions 1.00 & 1.01, ref 28)
-            # 0800=Z6/Z7  0801=Z50  0802=Z5   0803=Z6II/Z7II  0804=Zfc  0807=Z30
-            Condition => '$$valPt =~ /^080[012347]/',
+            # 0800=Z6/Z7  0801=Z50  0802=Z5   0803=Z6II/Z7II  0804=Zfc  0807=Z30 0808=Zf
+            Condition => '$$valPt =~ /^080[0123478]/',
             Name => 'ShotInfoZ7II',
             SubDirectory => {
                 TagTable => 'Image::ExifTool::Nikon::ShotInfoZ7II',
@@ -2481,7 +2483,7 @@ my %base64coord = (
     },
     0x0094 => { Name => 'SaturationAdj',    Writable => 'int16s' },
     0x0095 => { Name => 'NoiseReduction',   Writable => 'string' }, # ("Off" or "FPNR"=long exposure NR)
-    0x0096 => {
+    0x0096 => { # (not found in NRW files, but also not in all NEF's)
         Name => 'NEFLinearizationTable', # same table as DNG LinearizationTable (ref JD)
         Writable => 'undef',
         Flags => [ 'Binary', 'Protected' ],
@@ -4586,7 +4588,7 @@ my %base64coord = (
         RawConv => '$$self{AFInfo2Version} = $val',
     },
     5 => { #28
-        Name => 'AFAreaMode',     #reflects the mode active when the shutter is tripped, not the position of the Focus Mode button (which is recorded in MenuSettingsZ9 tag also named AfAreaMode)
+        Name => 'AFAreaMode', #reflects the mode active when the shutter is tripped, not the position of the Focus Mode button (which is recorded in MenuSettingsZ9 tag also named AfAreaMode)
         PrintConv => {
             192 => 'Pinpoint',
             193 => 'Single',
@@ -4602,7 +4604,7 @@ my %base64coord = (
     },
     10 => {
             Name => 'AFPointsUsed',
-            Condition => '$$self{AFAreaMode} == 6',    #only valid for Auto AF Area mode.  Other modes handled via AFAreaXPosition/AFAreaYPosition
+            Condition => 'defined $$self{AFAreaMode} and $$self{AFAreaMode} == 6', #only valid for Auto AF Area mode.  Other modes handled via AFAreaXPosition/AFAreaYPosition
             Format => 'undef[51]',
             ValueConv => 'join(" ", unpack("H2"x51, $val))',
             ValueConvInv => '$val=~tr/ //d; pack("H*",$val)',
@@ -5440,6 +5442,13 @@ my %nikonFocalConversions = (
             37 => 'Nikkor Z 600mm f/4 TC VR S', #28
             38 => 'Nikkor Z 85mm f/1.2 S', #28
             39 => 'Nikkor Z 17-28mm f/2.8', #IB
+            40 => 'NIKKOR Z 26mm f/2.8', #28
+            41 => 'NIKKOR Z DX 12-28mm f/3.5-5.6 PZ VR', #28
+            42 => 'Nikkor Z 180-600mm f/5.6-6.3 VR', #30
+            43 => 'NIKKOR Z DX 24mm f/1.7', #28
+            44 => 'NIKKOR Z 70-180mm f/2.8', #28
+            45 => 'NIKKOR Z 600mm f/6.3 VR S', #28
+            48 => 'Nikkor Z 135mm f/1.8 S Plena', #28
             32768 => 'Nikkor Z 400mm f/2.8 TC VR S TC-1.4x', #28
             32769 => 'Nikkor Z 600mm f/4 TC VR S TC-1.4x', #28
         },
@@ -6056,6 +6065,24 @@ my %nikonFocalConversions = (
         Format => 'int32u',
         Priority => 0,
     },
+    671.1 => { # 0x29f
+        Name => 'JPGCompression',
+        Mask => 0x40,
+        PrintConv => {
+            0 => 'Size Priority',
+            1 => 'Optimal Quality',
+        },
+    },
+    # this works for one set of D3S samples, but is 0 in some others
+    #671.2 => { # 0x29f
+    #    Name => 'Quality',
+    #    Mask => 0x03,
+    #    PrintConv => {
+    #        1 => 'Fine',
+    #        2 => 'Normal',
+    #        3 => 'Basic',
+    #    },
+    #},
     0x2ce => { #(NC)
         Name => 'CustomSettingsD3S',
         Format => 'undef[27]',
@@ -8500,7 +8527,7 @@ my %nikonFocalConversions = (
     DATAMEMBER => [ 0x0bea, 0x0beb ],
     0x0be8 => {
         Name => 'AFAreaInitialXPosition',        #stored as a representation of the horizontal position of the center of the portion of the focus box positioned top left when in Wide Area (L/S/C1/C2) focus modes (before subject detection potentially refines focus)
-        Condition => '$$self{ShutterMode} ne 96 and $$self{AFAreaMode} < 2 ',    #not valid for C30/C60/C120 or for Area Modes 1:1 and 16:19
+        Condition => '$$self{ShutterMode} and $$self{ShutterMode} ne 96 and defined $$self{AFAreaMode} and $$self{AFAreaMode} < 2 ',    #not valid for C30/C60/C120 or for Area Modes 1:1 and 16:19
         Format => 'int8s',
         PrintConv => q{
             #in FX mode and Single-point, the 29 horizontal focus points are spaced 259 pixels apart starting at pixel 502 and ending at 7754.  Spacing is the same for Wide(L/C1/C2) with different start points.
@@ -8562,7 +8589,7 @@ my %nikonFocalConversions = (
     },
     0x0be9 => {
         Name =>'AFAreaInitialYPosition',    #stored as a representation of the vertical position of the center of the portion of the focus box positioned top left when in Wide Area (L/S/C1/C2) focus modes (before subject detection potentially refines focus)
-        Condition => '$$self{ShutterMode} ne 96 and $$self{AFAreaMode} < 2',    #not valid for C30/C60/C120 or for Area Modes 1:1 and 16:19
+        Condition => '$$self{ShutterMode} and $$self{ShutterMode} ne 96 and defined $$self{AFAreaMode} and $$self{AFAreaMode} < 2',    #not valid for C30/C60/C120 or for Area Modes 1:1 and 16:19
         Format => 'int8s',
         PrintConv => q{
             #in FX mode and Single-point, the 17 vertical focus points are spaced 291 pixels apart starting at pixel 424 and ending at 5080.  Spacing is the same for Wide(L/C1/C2)
@@ -8626,13 +8653,13 @@ my %nikonFocalConversions = (
     },
     0x0bea => {
         Name => 'AFAreaInitialWidth',
-        Condition => '$$self{ShutterMode} ne 96',    #not valid for C30/C60/C120
+        Condition => '$$self{ShutterMode} and $$self{ShutterMode} ne 96',    #not valid for C30/C60/C120
         ValueConv => '$$self{VALUE}{PhotoShootingMenuBankImageArea} eq 0 ? $val : int($val * 2 / 3)',   #DX mode requires scaling down  TODO: add support ImageAreas 1:1 and 16:9
         RawConv => '$$self{AFAreaInitialWidth} = 1 + int ($val / 4)',    #convert from [3, 11, 19, 35, 51, 75] to [1, 3, 5, 9 13, 19] to match camera options for C1/C2 focus modes .. input/output of 11/3 is for Wide(S)
     },
     0x0beb => {
         Name => 'AFAreaInitialHeight',
-        Condition => '$$self{ShutterMode} ne 96',    #not valid for C30/C60/C120
+        Condition => '$$self{ShutterMode} and $$self{ShutterMode} ne 96',    #not valid for C30/C60/C120
         ValueConv => '$$self{VALUE}{PhotoShootingMenuBankImageArea} eq 0 ? $val : int($val * 2 / 3)',   #DX mode requires scaling down  TODO: add support ImageAreas 1:1 and 16:9
         RawConv => '$$self{AFAreaInitialHeight} = 1 + int ($val / 7) ',    #convert from [6, 20, 33, 46, 73] to [1, 3, 5, 7, 11] to match camera options for C1/C2 focus modes  .. input/output of 33/5 is for Wide(L)
     },
@@ -8848,7 +8875,7 @@ my %nikonFocalConversions = (
     %binaryDataAttrs,
     GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
     DATAMEMBER => [ 90, 176, 180, 328, 352, 858 ],
-    NOTES => 'These tags are used by the Z5, Z6, Z7, Z6II, Z7II, Z50 and Zfc.',
+    NOTES => 'These tags are used by the Z5, Z6, Z7, Z6II, Z7II, Z50, Zfc and Zf.',
     #48 SelfTimer'   #0=> no 1=> yes    works for Z7II firmware 1.40, but not 1.30.  Follow-up required.
     90 => {
         Name => 'SingleFrame',    #0=> Single Frame 1=> one of the continuous modes
