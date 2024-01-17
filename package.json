@@ -27,7 +27,7 @@
   "scripts": {
     "prettier": "prettier --write test/*.js",
     "test": "mocha",
-    "update": "ncu -u && bash -c ./update.sh"
+    "update": "ncu --upgrade --install && bash -c ./update.sh"
   },
   "release-it": {
     "hooks": {
