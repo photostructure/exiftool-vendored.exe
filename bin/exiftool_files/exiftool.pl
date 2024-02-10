@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '12.73';
+my $version = '12.76';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -61,7 +61,7 @@ sub PreserveTime();
 sub AbsPath($);
 sub MyConvertFileName($$);
 sub SuggestedExtension($$$);
-sub LoadPrintFormat($);
+sub LoadPrintFormat($;$);
 sub FilenameSPrintf($;$@);
 sub NextUnusedFilename($;$);
 sub CreateDirectory($);
@@ -263,7 +263,7 @@ my %optArgs = (
     '-lang' => 0, # (optional arg; cannot begin with "-")
     '-listitem' => 1,
     '-o' => 1, '-out' => 1,
-    '-p' => 1, '-printformat' => 1,
+    '-p' => 1, '-printformat' => 1, '-p-' => 1, '-printformat-' => 1,
     '-P' => 0,
     '-password' => 1,
     '-require' => 1,
@@ -586,7 +586,7 @@ if ($^O eq 'MSWin32' and eval { require File::Glob }) {
     $doGlob = 1;
 }
 
-$mt = new Image::ExifTool;      # create ExifTool object
+$mt = Image::ExifTool->new;      # create ExifTool object
 
 # don't extract duplicates by default unless set by UserDefined::Options
 $mt->Options(Duplicates => 0) unless %Image::ExifTool::UserDefined::Options
@@ -1146,10 +1146,10 @@ for (;;) {
     }
     /^overwrite_original$/i and $overwriteOrig = 1, next;
     /^overwrite_original_in_place$/i and $overwriteOrig = 2, next;
-    if (/^p$/ or $a eq 'printformat') {
+    if (/^p(-?)$/ or /^printformat(-?)$/i) {
         my $fmt = shift;
         if ($pass) {
-            LoadPrintFormat($fmt);
+            LoadPrintFormat($fmt, $1);
             # load MWG module now if necessary
             if (not $useMWG and grep /^mwg:/i, @requestTags) {
                 $useMWG = 1;
@@ -1158,7 +1158,7 @@ for (;;) {
             }
         } else {
             # defer to next pass so the filename charset is available
-            push @nextPass, '-p', $fmt;
+            push @nextPass, "-$_", $fmt;
         }
         next;
     }
@@ -1789,7 +1789,7 @@ if (not $altEnc and $mt->Options('Lang') ne 'en' and eval { require Encode }) {
 if (@fileOrder) {
     my @allFiles;
     ProcessFiles($mt, \@allFiles);
-    my $sortTool = new Image::ExifTool;
+    my $sortTool = Image::ExifTool->new;
     $sortTool->Options(FastScan => $fileOrderFast) if $fileOrderFast;
     $sortTool->Options(PrintConv => $mt->Options('PrintConv'));
     $sortTool->Options(Duplicates => 0);
@@ -2077,7 +2077,7 @@ sub GetImageInfo($$)
             @foundTags = ('*', @tags) if @tags;
             $info = $et->ImageInfo(Infile($pipe,$isWriting), \@foundTags, $opts);
             foreach $condition (@condition) {
-                my $cond = $et->InsertTagValues(\@foundTags, $condition, \%info);
+                my $cond = $et->InsertTagValues($condition, \@foundTags, \%info);
                 {
                     # set package so eval'd functions are in Image::ExifTool namespace
                     package Image::ExifTool;
@@ -2278,7 +2278,7 @@ sub GetImageInfo($$)
                 my @lines;
                 my $opt = $type eq 'IF' ? 'Silent' : 'Warn'; # silence "IF" warnings
                 foreach (@$prf) {
-                    my $line = $et->InsertTagValues(\@foundTags, $_, $opt, $grp, $cache);
+                    my $line = $et->InsertTagValues($_, \@foundTags, $opt, $grp, $cache);
                     if ($type eq 'IF') {
                         $skipBody = 1 unless defined $line;
                     } elsif (defined $line) {
@@ -2711,7 +2711,7 @@ TAG:    foreach $tag (@foundTags) {
                     } elsif ($fixLen == 1) {
                         $padLen -= length Encode::decode_utf8($desc);
                     } else {
-                        my $gcstr = eval { new Unicode::GCString(Encode::decode_utf8($desc)) };
+                        my $gcstr = eval { Unicode::GCString->new(Encode::decode_utf8($desc)) };
                         if ($gcstr) {
                             $padLen -= $gcstr->columns;
                         } else {
@@ -3637,7 +3637,7 @@ sub Infile($;$)
         if ($rafStdin) {
             $rafStdin->Seek(0); # rewind
         } elsif (open RAF_STDIN, '-') {
-            $rafStdin = new File::RandomAccess(\*RAF_STDIN);
+            $rafStdin = File::RandomAccess->new(\*RAF_STDIN);
             $rafStdin->BinMode();
         }
         return $rafStdin if $rafStdin;
@@ -4106,6 +4106,10 @@ sub SuggestedExtension($$$)
         $ext = 'pict';
     } elsif ($$valPt =~ /^\xff\x0a|\0\0\0\x0cJXL \x0d\x0a......ftypjxl/s) {
         $ext = 'jxl';
+    } elsif ($$valPt =~ /^.{4}jumb\0.{3}jumdc2pa/s) {
+        $ext = 'c2pa';
+    } elsif ($tag eq 'JUMBF') {
+        $ext = 'jumbf';
     } else {
         $ext = 'dat';
     }
@@ -4114,12 +4118,12 @@ sub SuggestedExtension($$$)
 
 #------------------------------------------------------------------------------
 # Load print format file
-# Inputs: 0) file name
+# Inputs: 0) file name, 1) flag to avoid adding newline to input argument
 # - saves lines of file to %printFmt list
 # - adds tag names to @tags list
-sub LoadPrintFormat($)
+sub LoadPrintFormat($;$)
 {
-    my $arg = shift;
+    my ($arg, $noNL) = @_;
     if (not defined $arg) {
         Error "Must specify file or expression for -p option\n";
     } elsif ($arg !~ /\n/ and -f $arg and $mt->Open(\*FMT_FILE, $arg)) {
@@ -4128,7 +4132,8 @@ sub LoadPrintFormat($)
         }
         close(FMT_FILE);
     } else {
-        AddPrintFormat($arg . "\n");
+        $arg .= "\n" unless $noNL;
+        AddPrintFormat($arg);
     }
 }
 
@@ -4292,7 +4297,7 @@ sub CreateDirectory($)
                         return 0;
                     }
                     unless ($k32CreateDir) {
-                        $k32CreateDir = new Win32::API('KERNEL32', 'CreateDirectoryW', 'PP', 'I');
+                        $k32CreateDir = Win32::API->new('KERNEL32', 'CreateDirectoryW', 'PP', 'I');
                     }
                     $success = $k32CreateDir->Call($d2, 0) if $k32CreateDir;
                 } else {
@@ -4652,49 +4657,50 @@ DESCRIPTION
 
       File Types
       ------------+-------------+-------------+-------------+------------
-      360   r/w   | DOCX  r     | ISO   r     | NRW   r/w   | RAR   r
-      3FR   r     | DPX   r     | ITC   r     | NUMBERS r   | RAW   r/w
-      3G2   r/w   | DR4   r/w/c | J2C   r     | O     r     | RIFF  r
-      3GP   r/w   | DSS   r     | JNG   r/w   | ODP   r     | RSRC  r
-      7Z    r     | DV    r     | JP2   r/w   | ODS   r     | RTF   r
-      A     r     | DVB   r/w   | JPEG  r/w   | ODT   r     | RW2   r/w
-      AA    r     | DVR-MS r    | JSON  r     | OFR   r     | RWL   r/w
-      AAC   r     | DYLIB r     | JXL   r     | OGG   r     | RWZ   r
-      AAE   r     | EIP   r     | K25   r     | OGV   r     | RM    r
-      AAX   r/w   | EPS   r/w   | KDC   r     | ONP   r     | SEQ   r
-      ACR   r     | EPUB  r     | KEY   r     | OPUS  r     | SKETCH r
-      AFM   r     | ERF   r/w   | LA    r     | ORF   r/w   | SO    r
-      AI    r/w   | EXE   r     | LFP   r     | ORI   r/w   | SR2   r/w
-      AIFF  r     | EXIF  r/w/c | LIF   r     | OTF   r     | SRF   r
-      APE   r     | EXR   r     | LNK   r     | PAC   r     | SRW   r/w
-      ARQ   r/w   | EXV   r/w/c | LRV   r/w   | PAGES r     | SVG   r
-      ARW   r/w   | F4A/V r/w   | M2TS  r     | PBM   r/w   | SWF   r
-      ASF   r     | FFF   r/w   | M4A/V r/w   | PCD   r     | THM   r/w
-      AVI   r     | FITS  r     | MACOS r     | PCX   r     | TIFF  r/w
-      AVIF  r/w   | FLA   r     | MAX   r     | PDB   r     | TORRENT r
-      AZW   r     | FLAC  r     | MEF   r/w   | PDF   r/w   | TTC   r
-      BMP   r     | FLIF  r/w   | MIE   r/w/c | PEF   r/w   | TTF   r
-      BPG   r     | FLV   r     | MIFF  r     | PFA   r     | TXT   r
-      BTF   r     | FPF   r     | MKA   r     | PFB   r     | VCF   r
-      CHM   r     | FPX   r     | MKS   r     | PFM   r     | VNT   r
-      COS   r     | GIF   r/w   | MKV   r     | PGF   r     | VRD   r/w/c
-      CR2   r/w   | GLV   r/w   | MNG   r/w   | PGM   r/w   | VSD   r
-      CR3   r/w   | GPR   r/w   | MOBI  r     | PLIST r     | WAV   r
-      CRM   r/w   | GZ    r     | MODD  r     | PICT  r     | WDP   r/w
-      CRW   r/w   | HDP   r/w   | MOI   r     | PMP   r     | WEBP  r/w
-      CS1   r/w   | HDR   r     | MOS   r/w   | PNG   r/w   | WEBM  r
-      CSV   r     | HEIC  r/w   | MOV   r/w   | PPM   r/w   | WMA   r
-      CUR   r     | HEIF  r/w   | MP3   r     | PPT   r     | WMV   r
-      CZI   r     | HTML  r     | MP4   r/w   | PPTX  r     | WPG   r
-      DCM   r     | ICC   r/w/c | MPC   r     | PS    r/w   | WTV   r
-      DCP   r/w   | ICO   r     | MPG   r     | PSB   r/w   | WV    r
-      DCR   r     | ICS   r     | MPO   r/w   | PSD   r/w   | X3F   r/w
-      DFONT r     | IDML  r     | MQV   r/w   | PSP   r     | XCF   r
-      DIVX  r     | IIQ   r/w   | MRC   r     | QTIF  r/w   | XISF  r
-      DJVU  r     | IND   r/w   | MRW   r/w   | R3D   r     | XLS   r
-      DLL   r     | INSP  r/w   | MXF   r     | RA    r     | XLSX  r
-      DNG   r/w   | INSV  r     | NEF   r/w   | RAF   r/w   | XMP   r/w/c
-      DOC   r     | INX   r     | NKSC  r/w   | RAM   r     | ZIP   r
+      360   r/w   | DOCX  r     | ITC   r     | O     r     | RSRC  r
+      3FR   r     | DPX   r     | J2C   r     | ODP   r     | RTF   r
+      3G2   r/w   | DR4   r/w/c | JNG   r/w   | ODS   r     | RW2   r/w
+      3GP   r/w   | DSS   r     | JP2   r/w   | ODT   r     | RWL   r/w
+      7Z    r     | DV    r     | JPEG  r/w   | OFR   r     | RWZ   r
+      A     r     | DVB   r/w   | JSON  r     | OGG   r     | RM    r
+      AA    r     | DVR-MS r    | JXL   r     | OGV   r     | SEQ   r
+      AAC   r     | DYLIB r     | K25   r     | ONP   r     | SKETCH r
+      AAE   r     | EIP   r     | KDC   r     | OPUS  r     | SO    r
+      AAX   r/w   | EPS   r/w   | KEY   r     | ORF   r/w   | SR2   r/w
+      ACR   r     | EPUB  r     | LA    r     | ORI   r/w   | SRF   r
+      AFM   r     | ERF   r/w   | LFP   r     | OTF   r     | SRW   r/w
+      AI    r/w   | EXE   r     | LIF   r     | PAC   r     | SVG   r
+      AIFF  r     | EXIF  r/w/c | LNK   r     | PAGES r     | SWF   r
+      APE   r     | EXR   r     | LRV   r/w   | PBM   r/w   | THM   r/w
+      ARQ   r/w   | EXV   r/w/c | M2TS  r     | PCD   r     | TIFF  r/w
+      ARW   r/w   | F4A/V r/w   | M4A/V r/w   | PCX   r     | TORRENT r
+      ASF   r     | FFF   r/w   | MACOS r     | PDB   r     | TTC   r
+      AVI   r     | FITS  r     | MAX   r     | PDF   r/w   | TTF   r
+      AVIF  r/w   | FLA   r     | MEF   r/w   | PEF   r/w   | TXT   r
+      AZW   r     | FLAC  r     | MIE   r/w/c | PFA   r     | VCF   r
+      BMP   r     | FLIF  r/w   | MIFF  r     | PFB   r     | VNT   r
+      BPG   r     | FLV   r     | MKA   r     | PFM   r     | VRD   r/w/c
+      BTF   r     | FPF   r     | MKS   r     | PGF   r     | VSD   r
+      C2PA  r     | FPX   r     | MKV   r     | PGM   r/w   | WAV   r
+      CHM   r     | GIF   r/w   | MNG   r/w   | PLIST r     | WDP   r/w
+      COS   r     | GLV   r/w   | MOBI  r     | PICT  r     | WEBP  r/w
+      CR2   r/w   | GPR   r/w   | MODD  r     | PMP   r     | WEBM  r
+      CR3   r/w   | GZ    r     | MOI   r     | PNG   r/w   | WMA   r
+      CRM   r/w   | HDP   r/w   | MOS   r/w   | PPM   r/w   | WMV   r
+      CRW   r/w   | HDR   r     | MOV   r/w   | PPT   r     | WPG   r
+      CS1   r/w   | HEIC  r/w   | MP3   r     | PPTX  r     | WTV   r
+      CSV   r     | HEIF  r/w   | MP4   r/w   | PS    r/w   | WV    r
+      CUR   r     | HTML  r     | MPC   r     | PSB   r/w   | X3F   r/w
+      CZI   r     | ICC   r/w/c | MPG   r     | PSD   r/w   | XCF   r
+      DCM   r     | ICO   r     | MPO   r/w   | PSP   r     | XISF  r
+      DCP   r/w   | ICS   r     | MQV   r/w   | QTIF  r/w   | XLS   r
+      DCR   r     | IDML  r     | MRC   r     | R3D   r     | XLSX  r
+      DFONT r     | IIQ   r/w   | MRW   r/w   | RA    r     | XMP   r/w/c
+      DIVX  r     | IND   r/w   | MXF   r     | RAF   r/w   | ZIP   r
+      DJVU  r     | INSP  r/w   | NEF   r/w   | RAM   r     |
+      DLL   r     | INSV  r     | NKSC  r/w   | RAR   r     |
+      DNG   r/w   | INX   r     | NRW   r/w   | RAW   r/w   |
+      DOC   r     | ISO   r     | NUMBERS r   | RIFF  r     |
 
       Meta Information
       ----------------------+----------------------+---------------------
@@ -4759,7 +4765,7 @@ OPTIONS
       -lang [LANG]                     Set current language
       -listItem INDEX                  Extract specific item from a list
       -n          (--printConv)        No print conversion
-      -p FMTFILE  (-printFormat)       Print output in specified format
+      -p[-] STR   (-printFormat)       Print output in specified format
       -php                             Export tags as a PHP Array
       -s[NUM]     (-short)             Short output format (-s for tag names)
       -S          (-veryShort)         Very short output format
@@ -5582,23 +5588,24 @@ OPTIONS
              > exiftool -Orientation=6 -n a.jpg
              > exiftool -Orientation#=6 a.jpg
 
-    -p *FMTFILE* or *STR* (-printFormat)
-         Print output in the format specified by the given file or string.
+    -p[-] *STR* or *FMTFILE* (-printFormat)
+         Print output in the format specified by the given string or file.
          The argument is interpreted as a string unless a file of that name
          exists, in which case the string is loaded from the contents of the
-         file. Tag names in the format file or string begin with a "$"
+         file. Tag names in the format string or file begin with a "$"
          symbol and may contain leading group names and/or a trailing "#"
          (to disable print conversion). Case is not significant. Braces "{}"
          may be used around the tag name to separate it from subsequent text
          (and must be used if subsequent text begins with an alphanumeric
          character, hyphen, underline, colon or number sign). Use $$ to
-         represent a "$" symbol, and $/ for a newline.
+         represent a "$" symbol, and $/ for a newline. When the string
+         argument is used (ie. *STR*), a newline is added to the end of the
+         string unless -p- is specified.
 
-         Multiple -p options may be used, each contributing a line (or more)
-         of text to the output. Lines beginning with "#[HEAD]" and "#[TAIL]"
-         are output before the first processed file and after the last
-         processed file respectively. Lines beginning with "#[SECT]" and
-         "#[ENDS]" are output before and after each section of files. A
+         Multiple -p options may be used. Lines beginning with "#[HEAD]" and
+         "#[TAIL]" are output before the first processed file and after the
+         last processed file respectively. Lines beginning with "#[SECT]"
+         and "#[ENDS]" are output before and after each section of files. A
          section is defined as a group of consecutive files with the same
          section header (eg. files are grouped by directory if "#[SECT]"
          contains $directory). Lines beginning with "#[BODY]" and lines not
@@ -5620,16 +5627,22 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.73 --
+             -- Generated by ExifTool 12.76 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
              (f/8.0, 1/13s, ISO 100)
              -- end --
 
-         The values of List-type tags with multiple items and Shortcut tags
-         representing multiple tags are joined according the -sep option
-         setting when interpolated in the string.
+         The values of List-type tags with multiple items, Shortcut tags
+         representing multiple tags, and matching tags when the "All" group
+         is specified are joined according the -sep option setting when
+         interpolated in the string. (Note that when "All" is used as a
+         group name, dupicate tags are included regardless of the Duplicates
+         option setting.) When "All" is used as a tag name, a value of 1 is
+         returned if any tag exists in the specified group, or 0 otherwise
+         (unless the "All" group is also specified, in which case the values
+         of all matching tags are joined).
 
          When -ee (-extractEmbedded) is combined with -p, embedded documents
          are effectively processed as separate input files.
@@ -6556,7 +6569,9 @@ OPTIONS
          with "^=". If *OPT* is not specified a list of available options is
          returned. The option name is not case senstive, but the option
          values are. See Image::ExifTool Options for option details. This
-         overrides API options set via the config file.
+         overrides API options set via the config file. Note that the
+         exiftool app sets some API options internally, and attempts to
+         change these via the command line will have no effect.
 
     -common_args
          Specifies that all arguments following this option are common to
