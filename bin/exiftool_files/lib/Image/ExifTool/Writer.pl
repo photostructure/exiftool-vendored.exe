@@ -137,12 +137,12 @@ my %rawType = (
 # 1) these names must either exist in %dirMap, or be translated in InitWriteDirs())
 # 2) any dependencies must be added to %excludeGroups
 my @delGroups = qw(
-    Adobe AFCP APP0 APP1 APP2 APP3 APP4 APP5 APP6 APP7 APP8 APP9 APP10 APP11
-    APP12 APP13 APP14 APP15 CanonVRD CIFF Ducky EXIF ExifIFD File FlashPix
-    FotoStation GlobParamIFD GPS ICC_Profile IFD0 IFD1 Insta360 InteropIFD IPTC
-    ItemList JFIF Jpeg2000 JUMBF Keys MakerNotes Meta MetaIFD Microsoft MIE MPF
-    NikonApp NikonCapture PDF PDF-update PhotoMechanic Photoshop PNG PNG-pHYs
-    PrintIM QuickTime RMETA RSRC SubIFD Trailer UserData XML XML-* XMP XMP-*
+    Adobe AFCP APP0 APP1 APP2 APP3 APP4 APP5 APP6 APP7 APP8 APP9 APP10 APP11 APP12
+    APP13 APP14 APP15 CanonVRD CIFF Ducky EXIF ExifIFD File FlashPix FotoStation
+    GlobParamIFD GPS ICC_Profile IFD0 IFD1 Insta360 InteropIFD IPTC ItemList JFIF
+    Jpeg2000 JUMBF Keys MakerNotes Meta MetaIFD Microsoft MIE MPF Nextbase NikonApp
+    NikonCapture PDF PDF-update PhotoMechanic Photoshop PNG PNG-pHYs PrintIM
+    QuickTime RMETA RSRC SubIFD Trailer UserData XML XML-* XMP XMP-*
 );
 # family 2 group names that we can delete
 my @delGroup2 = qw(
@@ -227,7 +227,7 @@ my %allFam0 = (
 
 my @writableMacOSTags = qw(
     FileCreateDate MDItemFinderComment MDItemFSCreationDate MDItemFSLabel MDItemUserTags
-    XAttrQuarantine
+    XAttrQuarantine XAttrMDItemWhereFroms
 );
 
 # min/max values for integer formats
@@ -1296,6 +1296,7 @@ sub SetNewValuesFromFile($$;@)
         FastScan        => $$options{FastScan},
         Filter          => $$options{Filter},
         FixBase         => $$options{FixBase},
+        Geolocation     => $$options{Geolocation},
         GlobalTimeShift => $$options{GlobalTimeShift},
         HexTagIDs       => $$options{HexTagIDs},
         IgnoreMinorErrors=>$$options{IgnoreMinorErrors},
@@ -2181,7 +2182,7 @@ sub SetSystemTags($$)
             $result = $res if $res == 1 or not $result;
             last;
         } elsif ($tag ne 'FileCreateDate') {
-            $self->WarnOnce('Can only set MDItem tags on OS X');
+            $self->WarnOnce('Can only set MDItem tags on MacOS');
             last;
         }
     }
