@@ -29,7 +29,7 @@ use vars qw($VERSION $RELEASE @ISA @EXPORT_OK %EXPORT_TAGS $AUTOLOAD @fileTypes
             %jpegMarker %specialTags %fileTypeLookup $testLen $exeDir
             %static_vars);
 
-$VERSION = '12.80';
+$VERSION = '12.82';
 $RELEASE = '';
 @ISA = qw(Exporter);
 %EXPORT_TAGS = (
@@ -921,7 +921,7 @@ $testLen = 1024;    # number of bytes to read when testing for magic number
     DICOM=> '(.{128}DICM|\0[\x02\x04\x06\x08]\0[\0-\x20]|[\x02\x04\x06\x08]\0[\0-\x20]\0)',
     DOCX => 'PK\x03\x04',
     DPX  => '(SDPX|XPDS)',
-    DR4  => 'IIII\x04\0\x04\0',
+    DR4  => 'IIII[\x04|\x05]\0\x04\0',
     DSS  => '(\x02dss|\x03ds2)',
     DV   => '\x1f\x07\0[\x3f\xbf]', # (not tested if extension recognized)
     DWF  => '\(DWF V\d',
@@ -1103,6 +1103,7 @@ my @availableOptions = (
     [ 'FilterW',          undef,  'input filter when writing tag values' ],
     [ 'FixBase',          undef,  'fix maker notes base offsets' ],
     [ 'Geolocation',      undef,  'generate geolocation tags' ],
+    [ 'GeolocAltNames',   1,      'search alternate city names if available' ],
     [ 'GeolocFeature',    undef,  'regular expression of geolocation features to match' ],
     [ 'GeolocMinPop',     undef,  'minimum geolocation population' ],
     [ 'GeolocMaxDist',    undef,  'maximum geolocation distance' ],
@@ -1136,6 +1137,7 @@ my @availableOptions = (
     [ 'NoPDFList',        undef,  'flag to avoid splitting PDF List-type tag values' ],
     [ 'NoWarning',        undef,  'regular expression for warnings to suppress' ],
     [ 'Password',         undef,  'password for password-protected PDF documents' ],
+    [ 'PrintCSV',         undef,  'flag to print CSV directly (selected metadata types only)' ],
     [ 'PrintConv',        1,      'flag to enable print conversion' ],
     [ 'QuickTimeHandler', 1,      'flag to add mdir Handler to newly created Meta box' ],
     [ 'QuickTimePad',     undef,  'flag to preserve padding of QuickTime CR3 tags' ],
@@ -1691,7 +1693,7 @@ my %systemTagsNotes = (
         Flags => ['Writable' ,'Protected', 'Binary'],
         Permanent => 0, # (this is 1 by default for MakerNotes tags)
         WriteCheck => q{
-            return undef if $val =~ /^IIII\x04\0\x04\0/;
+            return undef if $val =~ /^IIII[\x04|\x05]\0\x04\0/;
             return 'Invalid CanonDR4 data';
         },
     },
@@ -1988,27 +1990,34 @@ my %systemTagsNotes = (
         },
         ValueConvInv => q{
             require Image::ExifTool::Geolocation;
-            return $val if lc($val) eq 'geotag';
+            # write this tag later if geotagging
+            return $val if $val =~ /\bgeotag\b/i;
+            $val .= ',both';
             my $opts = $$self{OPTIONS};
-            my $geo = Image::ExifTool::Geolocation::Geolocate($self->Encode($val,'UTF8'),
-                $$opts{GeolocMinPop}, $$opts{GeolocMaxDist}, $$opts{Lang}, undef, $$opts{GeolocFeature});
-            return '' unless $geo;
-            if ($$geo[12] and $self->Warn('Multiple matching cities found',2)) {
+            my ($n, $i, $km, $be) = Image::ExifTool::Geolocation::Geolocate($self->Encode($val,'UTF8'), $opts);
+            return '' unless $n;
+            if ($n > 1 and $self->Warn('Multiple matching cities found',2)) {
                 warn "$$self{VALUE}{Warning}\n";
                 return '';
             }
-            my @tags = $self->GetGeolocateTags($wantGroup, defined $$geo[10] ? 0 : 1);
+            my @geo = Image::ExifTool::Geolocation::GetEntry($i, $$opts{Lang});
+            my @tags = $self->GetGeolocateTags($wantGroup, $km ? 0 : 1);
             my %geoNum = ( City => 0, Province => 1, State => 1, Code => 3, Country => 4,
                            Coordinates => 89, Latitude => 8, Longitude => 9 );
             my ($tag, $value);
             foreach $tag (@tags) {
                 if ($tag =~ /GPS(Coordinates|Latitude|Longitude)?/) {
-                    $value = $geoNum{$1} == 89 ? "$$geo[8],$$geo[9]" : $$geo[$geoNum{$1}];
+                    $value = $geoNum{$1} == 89 ? "$geo[8],$geo[9]" : $geo[$geoNum{$1}];
                 } elsif ($tag =~ /(Code)/ or $tag =~ /(City|Province|State|Country)/) {
-                    $value = $$geo[$geoNum{$1}];
+                    $value = $geo[$geoNum{$1}];
                     next unless defined $value;
                     $value = $self->Decode($value,'UTF8');
                     $value .= ' ' if $tag eq 'iptc:Country-PrimaryLocationCode'; # (IPTC requires 3-char code)
+                } elsif ($tag =~ /LocationName/) {
+                    $value = $geo[0] or next;
+                    $value .= ', ' . $geo[1] if $geo[1];
+                    $value .= ', ' . $geo[4] if $geo[4];
+                    $value = $self->Decode($value, 'UTF8');
                 } else {
                     next; # (shouldn't happen)
                 }
@@ -2017,16 +2026,18 @@ my %systemTagsNotes = (
             return '';
         },
         PrintConvInv => q{
-            return $val unless $val =~ /^([-+]?\d.*?[NS]?), ?([-+]?\d.*?[EW]?)$/ or
-                $val =~ /^\s*(-?\d+(?:\.\d+)?)\s*(-?\d+(?:\.\d+)?)\s*$/;
-            my ($lat, $lon) = ($1, $2);
-            require Image::ExifTool::GPS;
-            $lat = Image::ExifTool::GPS::ToDegrees($lat, 1, "lat");
-            $lon = Image::ExifTool::GPS::ToDegrees($lon, 1, "lon");
-            return "$lat, $lon";
+            my @args = split /\s*,\s*/, $val;
+            my $lat = 1;
+            foreach (@args) {
+                next unless /^[-+]?\d/;
+                require Image::ExifTool::GPS;
+                $_ = Image::ExifTool::GPS::ToDegrees($_, 1, $lat ? 'lat' : 'lon');
+                $lat ^= 1;
+            }
+            return join(',', @args);
         },
-    },        
-    GeolocationBearing  => { %geoInfo, 
+    },
+    GeolocationBearing  => { %geoInfo,
         Notes => q{
             compass bearing to GeolocationCity center. Geolocation tags are
             generated only if API L<Geolocation|../ExifTool.html#Geolocation> option is set
@@ -2640,7 +2651,6 @@ sub ExtractInfo($;@)
             $self->Options(Duplicates => 1) if $$options{HtmlDump};
             # enable Validate option if Validate tag is requested
             $self->Options(Validate => 1) if $$req{validate};
-
             if (defined $_[0]) {
                 # only initialize filename if called with arguments
                 $$self{FILENAME} = undef;   # name of file (or '' if we didn't open it)
@@ -2648,6 +2658,11 @@ sub ExtractInfo($;@)
 
                 $self->ParseArguments(@_);  # initialize from our arguments
             }
+        }
+        # ignore all tags and set ExtractEmbedded if outputting CSV directly
+        if ($self->Options('PrintCSV')) {
+            $$self{OPTIONS}{IgnoreTags} = { all => 1 };
+            $self->Options(ExtractEmbedded => 1);
         }
         # initialize ExifTool object members
         $self->Init();
@@ -2829,6 +2844,7 @@ sub ExtractInfo($;@)
             $self->FoundTag('FileTypeExtension', '');
             $self->DoneExtract();
             $raf->Close() if $raf;
+            %saveOptions and $$self{OPTIONS} = \%saveOptions;
             delete $$self{InExtract} unless $reEntry;
             return 1;
         }
@@ -3060,8 +3076,14 @@ sub ExtractInfo($;@)
         # restore necessary members when exiting re-entrant code
         $$self{$_} = $$reEntry{$_} foreach keys %$reEntry;
         SetByteOrder($saveOrder);
+    } else {
+        # call cleanup routines if necessary
+        if ($$self{Cleanup}) {
+            &$_($self) foreach @{$$self{Cleanup}};
+            delete $$self{Cleanup};
+        }
+        delete $$self{InExtract};
     }
-    delete $$self{InExtract} unless $reEntry;
 
     # ($type may be undef without an Error when processing sub-documents)
     return 0 if not defined $type or exists $$self{VALUE}{Error};
@@ -4338,25 +4360,27 @@ sub DoneExtract($)
             }
             local $SIG{'__WARN__'} = \&SetWarning;
             undef $evalWarning;
-            my $geo = Image::ExifTool::Geolocation::Geolocate($arg, $$opts{GeolocMinPop},
-                                $$opts{GeolocMaxDist}, $$opts{Lang}, $$opts{Duplicates},
-                                $$opts{GeolocFeature});
-            # ($$geo[0] will be an ARRAY ref if multiple matches were found and the Duplicates option is set)
-            if ($geo and (ref $$geo[0] or not $$geo[12] or not $self->Warn('Multiple Geolocation cities are possible',2))) {
-                my $geoList = ref $$geo[0] ? $geo : [ $geo ];  # make a list if not done alreaday
-                foreach $geo (@$geoList) {
-                    $self->FoundTag(GeolocationCity => $$geo[0]);
-                    $self->FoundTag(GeolocationRegion => $$geo[1]) if $$geo[1];
-                    $self->FoundTag(GeolocationSubregion => $$geo[2]) if $$geo[2];
-                    $self->FoundTag(GeolocationCountryCode => $$geo[3]);
-                    $self->FoundTag(GeolocationCountry => $$geo[4]) if $$geo[4];
-                    $self->FoundTag(GeolocationTimeZone => $$geo[5]) if $$geo[5];
-                    $self->FoundTag(GeolocationFeatureCode => $$geo[6]);
-                    $self->FoundTag(GeolocationPopulation => $$geo[7]);
-                    $self->FoundTag(GeolocationPosition => "$$geo[8] $$geo[9]");
-                    $self->FoundTag(GeolocationDistance => $$geo[10]) if defined $$geo[10];
-                    $self->FoundTag(GeolocationBearing => $$geo[11]) if defined $$geo[11];
-                    $self->FoundTag(GeolocationWarning => "Search matched $$geo[12] cities") if $$geo[12] and $geo eq $$geoList[0];
+            $$opts{GeolocMulti} = $$opts{Duplicates};
+            my ($n, $i, $km, $be) = Image::ExifTool::Geolocation::Geolocate($arg, $opts);
+            delete $$opts{GeolocMulti};
+            # ($i will be an ARRAY ref if multiple matches were found and the Duplicates option is set)
+            if ($n and (ref $i or $n < 2 or not $self->Warn('Multiple Geolocation cities are possible',2))) {
+                my $list = ref $i ? $i : [ $i ];  # make a list if not done alreaday
+                foreach $i (@$list) {
+                    my @geo = Image::ExifTool::Geolocation::GetEntry($i, $$opts{Lang});
+                    $self->FoundTag(GeolocationCity => $geo[0]);
+                    $self->FoundTag(GeolocationRegion => $geo[1]) if $geo[1];
+                    $self->FoundTag(GeolocationSubregion => $geo[2]) if $geo[2];
+                    $self->FoundTag(GeolocationCountryCode => $geo[3]);
+                    $self->FoundTag(GeolocationCountry => $geo[4]) if $geo[4];
+                    $self->FoundTag(GeolocationTimeZone => $geo[5]) if $geo[5];
+                    $self->FoundTag(GeolocationFeatureCode => $geo[6]);
+                    $self->FoundTag(GeolocationPopulation => $geo[7]);
+                    $self->FoundTag(GeolocationPosition => "$geo[8] $geo[9]");
+                    next if $i != $$list[0];
+                    $self->FoundTag(GeolocationDistance => $km) if defined $km;
+                    $self->FoundTag(GeolocationBearing => $be) if defined $be;
+                    $self->FoundTag(GeolocationWarning => "Search matched $n cities") if $n > 1;
                 }
             } elsif ($evalWarning) {
                 $self->Warn(CleanWarning());
@@ -5040,6 +5064,7 @@ sub SetFoundTags($)
                 $allTag = 1;
             } elsif ($tag =~ /[*?]/) {
                 # allow wildcards in tag names
+                $tag =~ tr/-_A-Za-z0-9*?//dc; # sterilize
                 $tag =~ s/\*/[-\\w]*/g;
                 $tag =~ s/\?/[-\\w]/g;
                 $tag .= '( \\(.*)?' if $doDups or $allGrp;
@@ -5047,6 +5072,7 @@ sub SetFoundTags($)
                 next unless @matches;   # don't want entry in list for wildcard tags
                 $allTag = 1;
             } elsif ($doDups or defined $group) {
+                $tag =~ tr/-_A-Za-z0-9//dc; # sterilize
                 # must also look for tags like "Tag (1)"
                 # (but be sure not to match temporary ValueConv entries like "Tag #")
                 @matches = grep(/^$tag( \(|$)/i, keys %$tagHash);
@@ -5257,6 +5283,16 @@ sub DoAutoLoad(@)
 sub AUTOLOAD
 {
     return DoAutoLoad($AUTOLOAD, @_);
+}
+
+#------------------------------------------------------------------------------
+# Add cleanup routine to call before returning from Extract
+# Inputs: 0) ExifTool ref, 1) code ref to routine with ExifTool ref as an argument
+sub AddCleanup($)
+{
+    my ($self, $sub) = @_;
+    $$self{Cleanup} or $$self{Cleanup} = [ ];
+    push @{$$self{Cleanup}}, $sub;
 }
 
 #------------------------------------------------------------------------------

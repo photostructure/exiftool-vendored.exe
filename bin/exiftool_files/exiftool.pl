@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '12.80';
+my $version = '12.82';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -209,7 +209,7 @@ my $tmpFile;        # temporary file to delete on exit
 my $tmpText;        # temporary text file
 my $validFile;      # flag indicating we processed a valid file
 my $verbose;        # verbose setting
-my $vout;           # verbose output file reference (\*STDOUT or \*STDERR)
+my $vout;           # verbose output file reference (\*STDOUT or \*STDERR by default)
 my $windowTitle;    # title for console window
 my %wroteHEAD;      # list of output txt files to which we wrote HEAD
 my $xml;            # flag for XML-formatted output
@@ -736,17 +736,23 @@ for (;;) {
             require Image::ExifTool::Geolocation;
             my ($i, $entry);
             print "Geolocation database:\n" unless $quiet;
-            print "City,Region,Subregion,CountryCode,Country,TimeZone,FeatureCode,Population,Latitude,Longitude\n";
+            my $isAlt = $mt->Options('GeolocAltNames') ? ',AltNames' : '';
+            $isAlt = '' if $isAlt and not Image::ExifTool::Geolocation::ReadAltNames();
+            print "City,Region,Subregion,CountryCode,Country,TimeZone,FeatureCode,Population,Latitude,Longitude$isAlt\n";
             Image::ExifTool::Geolocation::SortDatabase('City') if $sortOpt;
             my $minPop = $mt->Options('GeolocMinPop');
             my $feature = $mt->Options('GeolocFeature') || '';
             my $neg = $feature =~ s/^-//;
             my %fcodes = map { lc($_) => 1 } split /\s*,\s*/, $feature;
+            my @isUTF8 = (0,1,2,4);   # items that need converting from UTF8
+            push @isUTF8, 10 if $isAlt;
             for ($i=0; ; ++$i) {
-                my @entry = Image::ExifTool::Geolocation::GetEntry($i,$langOpt) or last;
+                my @entry = Image::ExifTool::Geolocation::GetEntry($i,$langOpt,1) or last;
                 next if $minPop and $entry[7] < $minPop;
                 next if %fcodes and $neg ? $fcodes{lc $entry[6]} : not $fcodes{lc $entry[6]};
-                $_ = defined $_ ? $mt->Decode($_, 'UTF8') : '' foreach @entry[0,1,2,4];
+                push @entry, Image::ExifTool::Geolocation::GetAltNames($i,1) if $isAlt;
+                $_ = defined $_ ? $mt->Decode($_, 'UTF8') : '' foreach @entry[@isUTF8];
+                pop @entry if $isAlt and not $entry[10];
                 print join(',', @entry), "\n";
             }
         } else { # 'g(\d*)'
@@ -1378,11 +1384,11 @@ for (;;) {
             $useMWG = 1;
         } elsif (/^([-\w]+:)*(filename|directory|testname)\b/i) {
             $doSetFileName = 1;
-        } elsif (/^([-\w]+:)*(geotag|geotime|geosync)\b/i) {
+        } elsif (/^([-\w]+:)*(geotag|geotime|geosync|geolocate)\b/i) {
             if (lc $2 eq 'geotime') {
                 $addGeotime = '';
             } else {
-                # add geotag/geosync commands first
+                # add geotag/geosync/geolocate commands first
                 unshift @newValues, pop @newValues;
                 if (lc $2 eq 'geotag' and (not defined $addGeotime or $addGeotime) and length $val) {
                     $addGeotime = ($1 || '') . 'Geotime<DateTimeOriginal#';
@@ -2172,7 +2178,7 @@ sub GetImageInfo($$)
 
     my $lineCount = 0;
     my ($fp, $outfile, $append);
-    if ($textOut and $verbose and not $tagOut) {
+    if ($textOut and ($verbose or $et->Options('PrintCSV')) and not $tagOut) {
         ($fp, $outfile, $append) = OpenOutputFile($orig);
         $fp or EFile($file), ++$countBad, return;
         # delete file if we exit prematurely (unless appending)
@@ -2295,7 +2301,7 @@ sub GetImageInfo($$)
             $lastDoc = 0;
         }
         for ($doc=0; $doc<=$lastDoc; ++$doc) {
-            my $skipBody;
+            my ($skipBody, $opt);
             foreach $type (qw(HEAD SECT IF BODY ENDS TAIL)) {
                 my $prf = $printFmt{$type} or next;
                 if ($type eq 'HEAD' and defined $outfile) {
@@ -2303,6 +2309,12 @@ sub GetImageInfo($$)
                     $wroteHEAD{$outfile} = 1;
                 }
                 next if $type eq 'BODY' and $skipBody;
+                # silence "IF" warnings and warnings for subdocuments > 1
+                if ($type eq 'IF' or ($doc > 1 and not $$et{OPTIONS}{IgnoreMinorErrors})) {
+                    $opt = 'Silent';
+                } else {
+                    $opt = 'Warn';
+                }
                 if ($lastDoc) {
                     if ($doc) {
                         next if $type eq 'HEAD' or $type eq 'TAIL'; # only repeat SECT/IF/BODY/ENDS
@@ -2312,7 +2324,6 @@ sub GetImageInfo($$)
                     }
                 }
                 my @lines;
-                my $opt = $type eq 'IF' ? 'Silent' : 'Warn'; # silence "IF" warnings
                 foreach (@$prf) {
                     my $line = $et->InsertTagValues($_, \@foundTags, $opt, $grp, $cache);
                     if ($type eq 'IF') {
@@ -5680,7 +5691,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.80 --
+             -- Generated by ExifTool 12.82 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -6462,9 +6473,9 @@ OPTIONS
          -listf, -listr or -listwf to add file descriptions to the list. The
          -lang option may be combined with -listx to output descriptions in
          a single language, and the -sort and/or -lang options may be
-         combined with -listgeo. Also, the API GeolocMinPop and
-         GeolocFeature options apply to the -listgeo output. Here are some
-         examples:
+         combined with -listgeo. Also, the API GeolocMinPop, GeolocFeature
+         and GeolocAltNames options apply to the -listgeo output. Here are
+         some examples:
 
              -list               # list all tag names
              -list -EXIF:All     # list all EXIF tags
@@ -6560,6 +6571,11 @@ OPTIONS
          "GEOTAGGING EXAMPLES" for examples. Also see "geotag.html" in the
          full ExifTool distribution and the Image::ExifTool Options for more
          details and for information about geotag configuration options.
+
+         The API Geolocation option may be set to the value "geotag" to also
+         write the name, province/state and country of the nearest city
+         while geotagging. See <https://exiftool.org/geolocation.html> for
+         details.
 
     -globalTimeShift *SHIFT*
          Shift all formatted date/time values by the specified amount when
@@ -7355,6 +7371,12 @@ GEOTAGGING EXAMPLES
          log ("track.log"). Since the "Geotime" tag is not specified, the
          value of DateTimeOriginal is used for geotagging. Local system time
          is assumed unless DateTimeOriginal contains a timezone.
+
+    exiftool -geotag track.log -geolocate=geotag a.jpg
+         Geotag an image and also write geolocation information of the
+         nearest city (city name, state/province and country). Read here for
+         more details about the Geolocation feature:
+         <https://exiftool.org/geolocation.html#Write>
 
     exiftool -geotag t.log -geotime="2009:04:02 13:41:12-05:00" a.jpg
          Geotag an image with the GPS position for a specific time.
