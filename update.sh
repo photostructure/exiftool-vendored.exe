@@ -22,6 +22,7 @@ rm -rf bin
 mkdir -p bin/exiftool_files
 
 # Pull down Oliver's supplemental files:
+# Read more: https://oliverbetz.de/pages/Artikel/ExifTool-for-Windows
 mkdir -p .dl
 DEST=.dl/pfe.zip
 if [ ! -f $DEST ]; then
@@ -55,3 +56,6 @@ else
   NEWVER=$(../exiftool/exiftool -ver).0-pre
   yarn version --new-version "$NEWVER"
 fi
+
+# This requires a code-signing USB token to be plugged in!
+node ./sign.js
