@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -ex
 
 # Verification of Oliver Betz's package
 
@@ -14,14 +14,14 @@
 mkdir -p .dl
 cd .dl
 
-wget https://strawberryperl.com/download/5.32.1.1/strawberry-perl-5.32.1.1-64bit-portable.zip
+curl -o strawberry-perl-5.32.1.1-64bit-portable.zip https://strawberryperl.com/download/5.32.1.1/strawberry-perl-5.32.1.1-64bit-portable.zip
 
 # Verify we're playing with what we expected:
-echo '692646105b0f5e058198a852dc52a48f1cebcaf676d63bbdeae12f4eaee9bf5c \*strawberry-perl-5.32.1.1-64bit-portable.zip' | sha256sum -c
+echo '692646105b0f5e058198a852dc52a48f1cebcaf676d63bbdeae12f4eaee9bf5c strawberry-perl-5.32.1.1-64bit-portable.zip' | sha256sum -c
 
-wget https://oliverbetz.de/cms/files/Artikel/ExifTool-for-Windows/exiftool-12.82_64.zip
+curl -o exiftool-12.82_64.zip https://oliverbetz.de/cms/files/Artikel/ExifTool-for-Windows/exiftool-12.82_64.zip
 # Verify we're playing with what we expected:
-echo '89a43e0e3c1b3145e44bc6b56ea66baddf35af8aed9828afcaf7ebfaebdd9998 \*exiftool-12.82_64.zip' | sha256sum -c
+echo '89a43e0e3c1b3145e44bc6b56ea66baddf35af8aed9828afcaf7ebfaebdd9998 exiftool-12.82_64.zip' | sha256sum -c
 
 # ob = Oliver Betz
 unzip exiftool-12.82_64.zip -d ob
@@ -32,9 +32,10 @@ unzip strawberry-perl-5.32.1.1-64bit-portable.zip -d sp
 # We replace the exiftool code and strip out the docs and the tests, so clean
 # those out now:
 
-rm -rf ob/exiftool_files/{arg_files,config_files,fmt_files,html,t,Changes,README,*exiftool*,LICENSE,readme_windows.txt}
-rm ob/exiftool_files/lib/Image/ExifTool.pm
-rm ob/Licenses_Strawberry_Perl.zip
+(
+  cd ob/exiftool_files
+  rm -rf arg_files config_files fmt_files html t Changes exiftool* LICENSE README readme_windows.txt selftest.pl windows_exiftool lib/Image/ExifTool* Licenses_Strawberry_Perl.zip
+)
 
 # And let's not worry about *.pod:
 find "$(pwd)" -name \*.pod -print0 | xargs -0 rm
@@ -44,11 +45,11 @@ find "$(pwd)" -name \*.pm -print0 | xargs -0 chmod +w
 find "$(pwd)" -name \*.pm -print0 | xargs -0 --max-args=1 --max-procs=16 ../.pod-strip.pl
 
 # I don't care if it's in sp/perl/lib or sp/perl/lib/vendor:
-rsync -Pa sp/perl/vendor/lib/ sp/perl/lib
+cp -r sp/perl/vendor/lib/* sp/perl/lib
 cp sp/c/bin/liblzma-5__.dll sp/perl
 
 # DLLs are in a different place. Move the strawberry perl ones:
-rsync -Pav sp/perl/bin/*.{dll,exe} sp/perl
+cp sp/perl/bin/*.{dll,exe} sp/perl
 
 # Several packages aren't in the strawberry perl archive:
 cpan Win32::FindFile
