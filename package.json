@@ -28,7 +28,7 @@
     "prettier": "prettier --write test/*.js",
     "test": "mocha",
     "sign": "node ./sign.js",
-    "update": "ncu --upgrade --install && bash -c ./update.sh"
+    "update": "ncu --upgrade --install always && bash -c ./update.sh"
   },
   "release-it": {
     "hooks": {
@@ -46,6 +46,6 @@
     "mocha": "^10.4.0",
     "npm-check-updates": "^16.14.18",
     "prettier": "^3.2.5",
-    "release-it": "^17.1.1"
+    "release-it": "^17.2.0"
   }
 }
