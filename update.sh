@@ -55,6 +55,3 @@ else
   NEWVER=$(../exiftool/exiftool -ver).0-pre
   yarn version --new-version "$NEWVER"
 fi
-
-# This requires a code-signing USB token to be plugged in!
-node ./sign.js
