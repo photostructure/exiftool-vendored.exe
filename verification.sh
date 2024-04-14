@@ -34,7 +34,7 @@ unzip strawberry-perl-5.32.1.1-64bit-portable.zip -d sp
 
 (
   cd ob/exiftool_files
-  rm -rf arg_files config_files fmt_files html t Changes exiftool* LICENSE README readme_windows.txt selftest.pl windows_exiftool lib/Image/ExifTool* Licenses_Strawberry_Perl.zip
+  rm -rf arg_files config_files fmt_files html t Changes exiftool* LICENSE README readme_windows.txt selftest.pl windows_exiftool lib/Image Licenses_Strawberry_Perl.zip
 )
 
 # And let's not worry about *.pod:
@@ -54,20 +54,20 @@ cp sp/perl/bin/*.{dll,exe} sp/perl
 # Several packages aren't in the strawberry perl archive:
 cpan Win32::FindFile
 mkdir -p sp/perl/lib/auto/Win32
-cp "$(find ~/perl5 -wholename \*/auto/Win32/FindFile.xs.dll)" sp/perl/lib/auto/Win32/
+cp "$(find ~/perl5 $PERL5LIB -wholename \*/auto/Win32/FindFile.xs.dll)" sp/perl/lib/auto/Win32/
 mkdir -p sp/perl/lib/Win32/
-cp "$(find ~/perl5 -wholename \*/Win32/FindFile.pm)" sp/perl/lib/Win32/
+cp "$(find ~/perl5 $PERL5LIB -wholename \*/Win32/FindFile.pm)" sp/perl/lib/Win32/
 
 cpan File::RandomAccess
 mkdir -p sp/perl/lib/File
-cp "$(find ~/perl5 -wholename \*/File/RandomAccess.pm)" sp/perl/lib/File/
+cp "$(find ~/perl5 $PERL5LIB -wholename \*/File/RandomAccess.pm)" sp/perl/lib/File/
 
 for ea in Compress Uncompress; do
   cpan IO::$ea::Brotli
   mkdir -p sp/perl/lib/auto/IO/$ea/Brotli/
-  cp "$(find ~/perl5 -wholename \*/auto/IO/$ea/Brotli/Brotli.xs.dll)" sp/perl/lib/auto/IO/$ea/Brotli
+  cp "$(find ~/perl5 $PERL5LIB -wholename \*/auto/IO/$ea/Brotli/Brotli.xs.dll)" sp/perl/lib/auto/IO/$ea/Brotli
   mkdir -p sp/perl/lib/IO/$ea/
-  cp "$(find ~/perl5 -wholename \*/$ea/Brotli.pm)" sp/perl/lib/IO/$ea/
+  cp "$(find ~/perl5 $PERL5LIB -wholename \*/$ea/Brotli.pm)" sp/perl/lib/IO/$ea/
 done
 
 # We don't care about lines that are due to POD being deleted (the `#line 1234`

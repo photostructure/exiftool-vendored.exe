@@ -5,16 +5,16 @@ use warnings;
 use bytes;
 require Exporter ;
 
-use IO::Compress::Base 2.086 ;
+use IO::Compress::Base 2.100 ;
 
-use IO::Compress::Base::Common  2.086 qw();
-use IO::Compress::Adapter::Bzip2 2.086 ;
+use IO::Compress::Base::Common  2.100 qw();
+use IO::Compress::Adapter::Bzip2 2.100 ;
 
 
 
 our ($VERSION, @ISA, @EXPORT_OK, %EXPORT_TAGS, $Bzip2Error);
 
-$VERSION = '2.086';
+$VERSION = '2.100';
 $Bzip2Error = '';
 
 @ISA    = qw(IO::Compress::Base Exporter);
@@ -40,7 +40,7 @@ sub bzip2
 }
 
 
-sub mkHeader 
+sub mkHeader
 {
     my $self = shift ;
     return '';
@@ -51,9 +51,9 @@ sub getExtraParams
 {
     my $self = shift ;
 
-    use IO::Compress::Base::Common  2.086 qw(:Parse);
-    
-    return (  
+    use IO::Compress::Base::Common  2.100 qw(:Parse);
+
+    return (
             'blocksize100k' => [IO::Compress::Base::Common::Parse_unsigned,  1],
             'workfactor'    => [IO::Compress::Base::Common::Parse_unsigned,  0],
             'verbosity'     => [IO::Compress::Base::Common::Parse_boolean,   0],
@@ -66,7 +66,7 @@ sub ckParams
 {
     my $self = shift ;
     my $got = shift;
-    
+
     # check that BlockSize100K is a number between 1 & 9
     if ($got->parsed('blocksize100k')) {
         my $value = $got->getValue('blocksize100k');
@@ -101,7 +101,7 @@ sub mkComp
 
     return $self->saveErrorString(undef, $errstr, $errno)
         if ! defined $obj;
-    
+
     return $obj;
 }
 
@@ -133,7 +133,7 @@ sub getFileInfo
     my $self = shift ;
     my $params = shift;
     my $file = shift ;
-    
+
 }
 
 1;
@@ -151,7 +151,7 @@ IO::Compress::Bzip2 - Write bzip2 files/buffers
     my $status = bzip2 $input => $output [,OPTS]
         or die "bzip2 failed: $Bzip2Error\n";
 
-    my $z = new IO::Compress::Bzip2 $output [,OPTS]
+    my $z = IO::Compress::Bzip2->new( $output [,OPTS] )
         or die "bzip2 failed: $Bzip2Error\n";
 
     $z->print($string);
@@ -183,7 +183,6 @@ IO::Compress::Bzip2 - Write bzip2 files/buffers
     binmode $z
     fileno $z
     close $z ;
- 
 
 =head1 DESCRIPTION
 
@@ -210,7 +209,8 @@ The functional interface needs Perl5.005 or better.
 =head2 bzip2 $input_filename_or_reference => $output_filename_or_reference [, OPTS]
 
 C<bzip2> expects at least two parameters,
-C<$input_filename_or_reference> and C<$output_filename_or_reference>.
+C<$input_filename_or_reference> and C<$output_filename_or_reference>
+and zero or more optional parameters (see L</Optional Parameters>)
 
 =head3 The C<$input_filename_or_reference> parameter
 
@@ -223,7 +223,7 @@ It can take one of the following forms:
 
 =item A filename
 
-If the <$input_filename_or_reference> parameter is a simple scalar, it is
+If the C<$input_filename_or_reference> parameter is a simple scalar, it is
 assumed to be a filename. This file will be opened for reading and the
 input data will be read from it.
 
@@ -319,9 +319,9 @@ in C<$output_filename_or_reference> as a concatenated series of compressed data 
 
 =head2 Optional Parameters
 
-Unless specified below, the optional parameters for C<bzip2>,
-C<OPTS>, are the same as those used with the OO interface defined in the
-L</"Constructor Options"> section below.
+The optional parameters for the one-shot function C<bzip2>
+are (for the most part) identical to those used with the OO interface defined in the
+L</"Constructor Options"> section. The exceptions are listed below
 
 =over 5
 
@@ -389,6 +389,22 @@ Defaults to 0.
 
 =head2 Examples
 
+Here are a few example that show the capabilities of the module.
+
+=head3 Streaming
+
+This very simple command line example demonstrates the streaming capabilities of the module.
+The code reads data from STDIN, compresses it, and writes the compressed data to STDOUT.
+
+    $ echo hello world | perl -MIO::Compress::Bzip2=bzip2 -e 'bzip2 \*STDIN => \*STDOUT' >output.bz2
+
+The special filename "-" can be used as a standin for both C<\*STDIN> and C<\*STDOUT>,
+so the above can be rewritten as
+
+    $ echo hello world | perl -MIO::Compress::Bzip2=bzip2 -e 'bzip2 "-" => "-"' >output.bz2
+
+=head3 Compressing a file from the filesystem
+
 To read the contents of the file C<file1.txt> and write the compressed
 data to the file C<file1.txt.bz2>.
 
@@ -400,6 +416,8 @@ data to the file C<file1.txt.bz2>.
     bzip2 $input => "$input.bz2"
         or die "bzip2 failed: $Bzip2Error\n";
 
+=head3 Reading from a Filehandle and writing to an in-memory buffer
+
 To read from an existing Perl filehandle, C<$input>, and write the
 compressed data to a buffer, C<$buffer>.
 
@@ -408,11 +426,13 @@ compressed data to a buffer, C<$buffer>.
     use IO::Compress::Bzip2 qw(bzip2 $Bzip2Error) ;
     use IO::File ;
 
-    my $input = new IO::File "<file1.txt"
+    my $input = IO::File->new( "<file1.txt" )
         or die "Cannot open 'file1.txt': $!\n" ;
     my $buffer ;
     bzip2 $input => \$buffer
         or die "bzip2 failed: $Bzip2Error\n";
+
+=head3 Compressing multiple files
 
 To compress all files in the directory "/my/home" that match "*.txt"
 and store the compressed data in the same directory
@@ -443,7 +463,7 @@ and if you want to compress each file one at a time, this will do the trick
 
 The format of the constructor for C<IO::Compress::Bzip2> is shown below
 
-    my $z = new IO::Compress::Bzip2 $output [,OPTS]
+    my $z = IO::Compress::Bzip2->new( $output [,OPTS] )
         or die "IO::Compress::Bzip2 failed: $Bzip2Error\n";
 
 It returns an C<IO::Compress::Bzip2> object on success and undef on failure.
@@ -488,7 +508,7 @@ return undef.
 
 =head2 Constructor Options
 
-C<OPTS> is any combination of the following options:
+C<OPTS> is any combination of zero or more the following options:
 
 =over 5
 
@@ -745,7 +765,7 @@ See the L</"Constructor Options"> section for more details.
 
 =head1 Importing
 
-No symbolic constants are required by this IO::Compress::Bzip2 at present.
+No symbolic constants are required by IO::Compress::Bzip2 at present.
 
 =over 5
 
@@ -768,6 +788,12 @@ See L<IO::Compress::FAQ|IO::Compress::FAQ/"Apache::GZip Revisited">
 
 See L<IO::Compress::FAQ|IO::Compress::FAQ/"Compressed files and Net::FTP">
 
+=head1 SUPPORT
+
+General feedback/questions/bug reports should be sent to
+L<https://github.com/pmqs/IO-Compress/issues> (preferred) or
+L<https://rt.cpan.org/Public/Dist/Display.html?Name=IO-Compress>.
+
 =head1 SEE ALSO
 
 L<Compress::Zlib>, L<IO::Compress::Gzip>, L<IO::Uncompress::Gunzip>, L<IO::Compress::Deflate>, L<IO::Uncompress::Inflate>, L<IO::Compress::RawDeflate>, L<IO::Uncompress::RawInflate>, L<IO::Uncompress::Bunzip2>, L<IO::Compress::Lzma>, L<IO::Uncompress::UnLzma>, L<IO::Compress::Xz>, L<IO::Uncompress::UnXz>, L<IO::Compress::Lzip>, L<IO::Uncompress::UnLzip>, L<IO::Compress::Lzop>, L<IO::Uncompress::UnLzop>, L<IO::Compress::Lzf>, L<IO::Uncompress::UnLzf>, L<IO::Compress::Zstd>, L<IO::Uncompress::UnZstd>, L<IO::Uncompress::AnyInflate>, L<IO::Uncompress::AnyUncompress>
@@ -778,7 +804,7 @@ L<File::GlobMapper|File::GlobMapper>, L<Archive::Zip|Archive::Zip>,
 L<Archive::Tar|Archive::Tar>,
 L<IO::Zlib|IO::Zlib>
 
-The primary site for the bzip2 program is L<http://www.bzip.org>.
+The primary site for the bzip2 program is L<https://sourceware.org/bzip2/>.
 
 See the module L<Compress::Bzip2|Compress::Bzip2>
 
@@ -792,8 +818,7 @@ See the Changes file.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (c) 2005-2019 Paul Marquess. All rights reserved.
+Copyright (c) 2005-2021 Paul Marquess. All rights reserved.
 
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
-

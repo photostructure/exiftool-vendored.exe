@@ -14,7 +14,7 @@ use base "File::HomeDir::Driver";
 
 BEGIN
 {
-    $VERSION = '1.004';
+    $VERSION = '1.006';
 }
 
 sub CREATE () { 1 }
@@ -188,71 +188,4 @@ sub _d
 
 1;
 
-=pod
-
-=head1 NAME
-
-File::HomeDir::Windows - Find your home and other directories on Windows
-
-=head1 SYNOPSIS
-
-  use File::HomeDir;
-  
-  # Find directories for the current user (eg. using Windows XP Professional)
-  $home    = File::HomeDir->my_home;        # C:\Documents and Settings\mylogin
-  $desktop = File::HomeDir->my_desktop;     # C:\Documents and Settings\mylogin\Desktop
-  $docs    = File::HomeDir->my_documents;   # C:\Documents and Settings\mylogin\My Documents
-  $music   = File::HomeDir->my_music;       # C:\Documents and Settings\mylogin\My Documents\My Music
-  $pics    = File::HomeDir->my_pictures;    # C:\Documents and Settings\mylogin\My Documents\My Pictures
-  $videos  = File::HomeDir->my_videos;      # C:\Documents and Settings\mylogin\My Documents\My Video
-  $data    = File::HomeDir->my_data;        # C:\Documents and Settings\mylogin\Local Settings\Application Data
-
-=head1 DESCRIPTION
-
-This module provides Windows-specific implementations for determining
-common user directories.  In normal usage this module will always be
-used via L<File::HomeDir>.
-
-Internally this module will use L<Win32>::GetFolderPath to fetch the location
-of your directories. As a result of this, in certain unusual situations
-(usually found inside large organizations) the methods may return UNC paths
-such as C<\\cifs.local\home$>.
-
-If your application runs on Windows and you want to have it work comprehensively
-everywhere, you may need to implement your own handling for these paths as they
-can cause strange behaviour.
-
-For example, stat calls to UNC paths may work but block for several seconds, but
-opendir() may not be able to read any files (creating the appearance of an existing
-but empty directory).
-
-To avoid complicating the problem any further, in the rare situation that a UNC path
-is returned by C<GetFolderPath> the usual -d validation checks will B<not> be done.
-
-=head1 SUPPORT
-
-See the support section the main L<File::HomeDir> module.
-
-=head1 AUTHORS
-
-Adam Kennedy E<lt>adamk@cpan.orgE<gt>
-
-Sean M. Burke E<lt>sburke@cpan.orgE<gt>
-
-=head1 SEE ALSO
-
-L<File::HomeDir>, L<File::HomeDir::Win32> (legacy)
-
-=head1 COPYRIGHT
-
-Copyright 2005 - 2011 Adam Kennedy.
-
-Some parts copyright 2000 Sean M. Burke.
-
-This program is free software; you can redistribute
-it and/or modify it under the same terms as Perl itself.
-
-The full text of the license can be found in the
-LICENSE file included with this module.
-
-=cut
+#line 261

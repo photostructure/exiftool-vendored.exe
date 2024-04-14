@@ -14,7 +14,7 @@ use FileHandle          ();
 use vars qw( $VERSION @ISA );
 
 BEGIN {
-    $VERSION = '1.64';
+    $VERSION = '1.68';
 
     require Exporter;
     @ISA = qw( Exporter );
@@ -39,6 +39,7 @@ BEGIN {
     %EXPORT_TAGS = (
         CONSTANTS => [
             qw(
+              ZIP64_SUPPORTED
               FA_MSDOS
               FA_UNIX
               GPBF_ENCRYPTED_MASK
@@ -53,6 +54,9 @@ BEGIN {
               IFA_TEXT_FILE_MASK
               IFA_TEXT_FILE
               IFA_BINARY_FILE
+              ZIP64_AS_NEEDED
+              ZIP64_EOCD
+              ZIP64_HEADERS
               )
         ],
 
@@ -117,9 +121,13 @@ BEGIN {
               DATA_DESCRIPTOR_SIGNATURE
               DATA_DESCRIPTOR_FORMAT
               DATA_DESCRIPTOR_LENGTH
+              DATA_DESCRIPTOR_ZIP64_FORMAT
+              DATA_DESCRIPTOR_ZIP64_LENGTH
 
               DATA_DESCRIPTOR_FORMAT_NO_SIG
               DATA_DESCRIPTOR_LENGTH_NO_SIG
+              DATA_DESCRIPTOR_ZIP64_FORMAT_NO_SIG
+              DATA_DESCRIPTOR_ZIP64_LENGTH_NO_SIG
 
               CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE
               CENTRAL_DIRECTORY_FILE_HEADER_FORMAT
@@ -137,6 +145,8 @@ BEGIN {
               END_OF_CENTRAL_DIRECTORY_FORMAT
               END_OF_CENTRAL_DIRECTORY_LENGTH
 
+              ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_SIGNATURE_STRING
+              ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE_STRING
               END_OF_CENTRAL_DIRECTORY_SIGNATURE_STRING
               )
         ],
@@ -148,6 +158,7 @@ BEGIN {
               _printError
               _ioError
               _formatError
+              _zip64NotSupported
               _subclassResponsibility
               _binmode
               _isSeekable
@@ -169,6 +180,9 @@ BEGIN {
           ));
 
 }
+
+# Zip64 format support status
+use constant ZIP64_SUPPORTED => !! eval { pack("Q<", 1) };
 
 # Error codes
 use constant AZ_OK           => 0;
@@ -232,6 +246,12 @@ use constant IFA_TEXT_FILE_MASK => 1;
 use constant IFA_TEXT_FILE      => 1;
 use constant IFA_BINARY_FILE    => 0;
 
+# desired zip64 structures for archive creation
+
+use constant ZIP64_AS_NEEDED => 0;
+use constant ZIP64_EOCD      => 1;
+use constant ZIP64_HEADERS   => 2;
+
 # PKZIP file format miscellaneous constants (for internal use only)
 use constant SIGNATURE_FORMAT => "V";
 use constant SIGNATURE_LENGTH => 4;
@@ -242,13 +262,17 @@ use constant LOCAL_FILE_HEADER_FORMAT    => "v3 V4 v2";
 use constant LOCAL_FILE_HEADER_LENGTH    => 26;
 
 # PKZIP docs don't mention the signature, but Info-Zip writes it.
-use constant DATA_DESCRIPTOR_SIGNATURE => 0x08074b50;
-use constant DATA_DESCRIPTOR_FORMAT    => "V3";
-use constant DATA_DESCRIPTOR_LENGTH    => 12;
+use constant DATA_DESCRIPTOR_SIGNATURE    => 0x08074b50;
+use constant DATA_DESCRIPTOR_FORMAT       => "V3";
+use constant DATA_DESCRIPTOR_LENGTH       => 12;
+use constant DATA_DESCRIPTOR_ZIP64_FORMAT => "L< Q<2";
+use constant DATA_DESCRIPTOR_ZIP64_LENGTH => 20;
 
 # but the signature is apparently optional.
-use constant DATA_DESCRIPTOR_FORMAT_NO_SIG => "V2";
-use constant DATA_DESCRIPTOR_LENGTH_NO_SIG => 8;
+use constant DATA_DESCRIPTOR_FORMAT_NO_SIG       => "V2";
+use constant DATA_DESCRIPTOR_LENGTH_NO_SIG       => 8;
+use constant DATA_DESCRIPTOR_ZIP64_FORMAT_NO_SIG => "Q<2";
+use constant DATA_DESCRIPTOR_ZIP64_LENGTH_NO_SIG => 16;
 
 use constant CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE => 0x02014b50;
 use constant CENTRAL_DIRECTORY_FILE_HEADER_FORMAT    => "C2 v3 V4 v5 V2";
@@ -256,13 +280,16 @@ use constant CENTRAL_DIRECTORY_FILE_HEADER_LENGTH    => 42;
 
 # zip64 support
 use constant ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_SIGNATURE => 0x06064b50;
-use constant ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_FORMAT => 0;
-use constant ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_LENGTH => 0;
+use constant ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_SIGNATURE_STRING =>
+  pack("V", ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_SIGNATURE);
+use constant ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_FORMAT => "Q< S<2 L<2 Q<4";
+use constant ZIP64_END_OF_CENTRAL_DIRECTORY_RECORD_LENGTH => 52;
 
 use constant ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE => 0x07064b50;
-use constant ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_FORMAT => 0;
-use constant ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_LENGTH => 0;
-
+use constant ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE_STRING =>
+  pack("V", ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE);
+use constant ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_FORMAT => "L< Q< L<";
+use constant ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_LENGTH => 16;
 
 use constant END_OF_CENTRAL_DIRECTORY_SIGNATURE => 0x06054b50;
 use constant END_OF_CENTRAL_DIRECTORY_SIGNATURE_STRING =>
@@ -385,6 +412,14 @@ sub _error {
     return AZ_ERROR;
 }
 
+# This is called if zip64 format is not supported but would be
+# required.
+sub _zip64NotSupported {
+    shift if ref($_[0]);
+    _printError('zip64 format not supported on this Perl interpreter');
+    return AZ_ERROR;
+}
+
 # Called when a subclass should have implemented
 # something but didn't
 sub _subclassResponsibility {
@@ -462,13 +497,20 @@ sub _newFileHandle {
 
 # Returns next signature from given file handle, leaves
 # file handle positioned afterwards.
+#
 # In list context, returns ($status, $signature)
-# ( $status, $signature) = _readSignature( $fh, $fileName );
-
+# ( $status, $signature ) = _readSignature( $fh, $fileName );
+#
+# This function returns one of AZ_OK, AZ_IO_ERROR, or
+# AZ_FORMAT_ERROR and calls the respective error handlers in the
+# latter two cases.  If optional $noFormatError is true, it does
+# not call the error handler on format error, but only returns
+# AZ_FORMAT_ERROR.
 sub _readSignature {
     my $fh                = shift;
     my $fileName          = shift;
     my $expectedSignature = shift;    # optional
+    my $noFormatError     = shift;    # optional
 
     my $signatureData;
     my $bytesRead = $fh->read($signatureData, SIGNATURE_LENGTH);
@@ -490,12 +532,17 @@ sub _readSignature {
             && $signature != ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE
         )
       ) {
-        my $errmsg = sprintf("bad signature: 0x%08x", $signature);
-        if (_isSeekable($fh)) {
-            $errmsg .= sprintf(" at offset %d", $fh->tell() - SIGNATURE_LENGTH);
-        }
+        if (! $noFormatError ) {
+            my $errmsg = sprintf("bad signature: 0x%08x", $signature);
+            if (_isSeekable($fh)) {
+                $errmsg .= sprintf(" at offset %d", $fh->tell() - SIGNATURE_LENGTH);
+            }
 
-        $status = _formatError("$errmsg in file $fileName");
+            $status = _formatError("$errmsg in file $fileName");
+        }
+        else {
+            $status = AZ_FORMAT_ERROR;
+        }
     }
 
     return ($status, $signature);
@@ -546,7 +593,7 @@ sub _asZipDirName {
     my ($volume, $directories, $file) =
       File::Spec->splitpath(File::Spec->canonpath($name), $forceDir);
     $$volReturn = $volume if (ref($volReturn));
-    my @dirs = map { $_ =~ s{/}{_}g; $_ } File::Spec->splitdir($directories);
+    my @dirs = map { $_ =~ y{/}{_}; $_ } File::Spec->splitdir($directories);
     if (@dirs > 0) { pop(@dirs) unless $dirs[-1] }    # remove empty component
     push(@dirs, defined($file) ? $file : '');
 
@@ -722,6 +769,7 @@ COMPRESSION_STORED COMPRESSION_DEFLATED IFA_TEXT_FILE_MASK
 IFA_TEXT_FILE IFA_BINARY_FILE COMPRESSION_LEVEL_NONE
 COMPRESSION_LEVEL_DEFAULT COMPRESSION_LEVEL_FASTEST
 COMPRESSION_LEVEL_BEST_COMPRESSION
+ZIP64_SUPPORTED ZIP64_AS_NEEDED ZIP64_EOCD ZIP64_HEADERS
 
 =item :MISC_CONSTANTS
 
@@ -1025,6 +1073,26 @@ members in scalar context.
     my @textFileMembers = $zip->membersMatching( '.*\.txt' );
     # or
     my $numberOfTextFiles = $zip->membersMatching( '.*\.txt' );
+
+=item zip64()
+
+Returns whether the previous read or write of the archive has
+been done in zip64 format.
+
+=item desiredZip64Mode()
+
+Gets or sets which parts of the archive should be written in
+zip64 format: All parts as needed (ZIP64_AS_NEEDED), the default,
+force writing the zip64 end of central directory record
+(ZIP64_EOCD), force writing the zip64 EOCD record and all headers
+in zip64 format (ZIP64_HEADERS).
+
+=item versionMadeBy()
+
+=item versionNeededToExtract()
+
+Gets the fields from the zip64 end of central directory
+record. These are always 0 if the archive is not in zip64 format.
 
 =item diskNumber()
 
@@ -1658,7 +1726,9 @@ but they don't add the new members to a zip.
 Construct a new member from the given string. Returns undef
 on error.
 
-    my $member = Archive::Zip::Member->newFromString( 'This is a test',
+    my $member = Archive::Zip::Member->newFromString( 'This is a test' );
+    my $member = Archive::Zip::Member->newFromString( 'This is a test', 'test.txt' );
+    my $member = Archive::Zip::Member->newFromString( { string => 'This is a test', zipName => 'test.txt' } );
 
 =item newFromFile( $fileName [, $zipName ] )
 
@@ -1688,11 +1758,29 @@ Returns undef on error.
 
 =back
 
-=head2 Member Simple accessors
+=head2 Member Simple Accessors
 
 These methods get (and/or set) member attribute values.
 
+The zip64 format requires parts of the member data to be stored
+in the so-called extra fields.  You cannot get nor set this zip64
+data through the extra field accessors described in this section.
+In fact, the low-level member methods ensure that the zip64 data
+in the extra fields is handled completely transparently and
+invisibly to the user when members are read or written.
+
 =over 4
+
+=item zip64()
+
+Returns whether the previous read or write of the member has been
+done in zip64 format.
+
+=item desiredZip64Mode()
+
+Gets or sets whether the member's headers should be written in
+zip64 format: As needed (ZIP64_AS_NEEDED), the default, or always
+(ZIP64_HEADERS).
 
 =item versionMadeBy()
 
@@ -1809,17 +1897,20 @@ comparisons.
 =item localExtraField( [ { field => $newField } ] )
 
 Gets or sets the extra field that was read from the local
-header. This is not set for a member from a zip file until
-after the member has been written out. The extra field must
-be in the proper format.
+header. The extra field must be in the proper format.  If it is
+not or if the new field contains data related to the zip64
+format, this method does not modify the extra field and returns
+AZ_FORMAT_ERROR, otherwise it returns AZ_OK.
 
 =item cdExtraField( [ $newField ] )
 
 =item cdExtraField( [ { field => $newField } ] )
 
 Gets or sets the extra field that was read from the central
-directory header. The extra field must be in the proper
-format.
+directory header. The extra field must be in the proper format.
+If it is not or if the new field contains data related to the
+zip64 format, this method does not modify the extra field and
+returns AZ_FORMAT_ERROR, otherwise it returns AZ_OK.
 
 =item extraFields()
 
@@ -1915,6 +2006,10 @@ Returns AZ_OK on success.
 
 Returns true if I am a directory.
 
+=item isSymbolicLink()
+
+Returns true if I am a symbolic link.
+
 =item writeLocalHeaderRelativeOffset()
 
 Returns the file offset in bytes the last time I was written.
@@ -2005,6 +2100,10 @@ change the class of the member):
 Extract (and uncompress, if necessary) the member's contents
 to the given file handle. Return AZ_OK on success.
 
+For members representing symbolic links, pass the name of the
+symbolic link as file handle. Ensure that all directories in the
+path to the symbolic link already exist.
+
 =back
 
 =head1 Archive::Zip::FileMember methods
@@ -2085,6 +2184,57 @@ If you are just going to be extracting zips (and/or other archives) you
 are recommended to look at using L<Archive::Extract> instead, as it is much
 easier to use and factors out archive-specific functionality.
 
+=head2 Zip64 Format Support
+
+Since version 1.66 Archive::Zip supports the so-called zip64
+format, which overcomes various limitations in the original zip
+file format.  On some Perl interpreters, however, even version
+1.66 and newer of Archive::Zip cannot support the zip64 format.
+Among these are all Perl interpreters that lack 64-bit support
+and those older than version 5.10.0.
+
+Constant C<ZIP64_SUPPORTED>, exported with tag L<:CONSTANTS>,
+equals true if Archive::Zip on the current Perl interpreter
+supports the zip64 format.  If it does not and you try to read or
+write an archive in zip64 format, anyway, Archive::Zip returns an
+error C<AZ_ERROR> and reports an error message along the lines of
+"zip64 format not supported on this Perl interpreter".
+
+=head2 C<versionMadeBy> and C<versionNeededToExtract>
+
+The zip64 format and the zip file format in general specify what
+values to use for the C<versionMadeBy> and
+C<versionNeededToExtract> fields in the local file header,
+central directory file header, and zip64 EOCD record.  In
+practice however, these fields seem to be more or less randomly
+used by various archiver implementations.
+
+To achieve a compromise between backward compatibility and
+(whatever) standard compliance, Archive::Zip handles them as
+follows:
+
+=over 4
+
+=item
+
+For field C<versionMadeBy>, Archive::Zip uses default value 20
+(45 for the zip64 EOCD record) or any previously read value. It
+never changes that value when writing a header, even if it is
+written in zip64 format, or when writing the zip64 EOCD record.
+
+=item
+
+Likewise for field C<versionNeededToExtract>, but here
+Archive::Zip forces a minimum value of 45 when writing a header
+in zip64 format or the zip64 EOCD record.
+
+=item
+
+Finally, Archive::Zip never depends on the values of these fields
+in any way when reading an archive from a file or file handle.
+
+=back
+
 =head2 Try to avoid IO::Scalar
 
 One of the most common ways to use Archive::Zip is to generate Zip files
@@ -2133,11 +2283,11 @@ have to re-read the entire archive to try again with the correct password.
 
 =head1 SUPPORT
 
-Bugs should be reported via the CPAN bug tracker
+Bugs should be reported on GitHub
 
-L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Archive-Zip>
+L<https://github.com/redhotpenguin/perl-Archive-Zip/issues>
 
-For other issues contact the maintainer
+For other issues contact the maintainer.
 
 =head1 AUTHOR
 
