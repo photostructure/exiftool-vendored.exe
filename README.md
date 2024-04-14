@@ -12,6 +12,12 @@ Provides the win32 distribution of [ExifTool](http://www.sno.phy.queensu.ca/~phi
 [exiftool-vendored](https://github.com/photostructure/exiftool-vendored.js) for
 performant, type-safe access to this binary.**
 
+## Thanks to Oliver Betz!
+
+This module heavily depends on [Oliver Betz's portable Perl
+launcher](https://oliverbetz.de/pages/Artikel/Portable-Perl-Applications) which leverages Strawberry Perl. [Read more
+here.](https://oliverbetz.de/pages/Artikel/ExifTool-for-Windows)
+
 ## Versioning
 
 This package exposes the version of ExifTool it vendors, and adds a patch number, if necessary, to follow SemVer.

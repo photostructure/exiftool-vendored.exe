@@ -3,6 +3,9 @@ node_modules
 *.log
 .vscode
 
+.dl
+snyk-linux
+
 node_modules/
 yarn.lock
 package-lock.json
