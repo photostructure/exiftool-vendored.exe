@@ -9,14 +9,15 @@
 #
 # References:   https://download.geonames.org/export/
 #
-# Notes:        Set $Image::ExifTool::Geolocation::geoDir to override
-#               default directory for the database file Geolocation.dat
-#               and language directory GeoLang.
+# Notes:        Set $Image::ExifTool::Geolocation::geoDir to override the
+#               default directory containing the database file Geolocation.dat
+#               and the GeoLang directory with the alternate language files.
+#               If set, this directory is 
 #
-#               Set $Image::ExifTool::Geolocation::altDir to use a database
-#               of alternate city names.  The file is called AltNames.dat
-#               with entries in the same order as Geolocation.dat.  Each
-#               entry is a newline-separated list of alternate names
+#               AltNames.dat may be loaded from a different directory by
+#               specifying $Image::ExifTool::Geolocation::altDir.  This
+#               database and has entries in the same order as Geolocation.dat,
+#               and each entry is a newline-separated list of alternate names
 #               terminated by a null byte.
 #
 #               Databases are based on data from geonames.org with a
@@ -37,7 +38,7 @@
 #        9   int16u - v1.02: 0x7fff = index in subregion (admin2), 0x8000 = high bit of time zone
 #        9   int16u - v1.03: index in subregion (admin2)
 #       11   int8u  - low byte of time zone index
-#       12   int8u  - 0x0f = feature code index (see below), v1.03: 0x80 = high bit of time zone
+#       12   int8u  - 0x3f = feature code index (see below), v1.03: 0x80 = high bit of time zone
 #       13   string - UTF8 City name, terminated by newline
 #   "\0\0\0\0\x01"
 #   Country entries:
@@ -52,9 +53,12 @@
 #   "\0\0\0\0\x04"
 #   Time zone entries:
 #       1. Time zone name, terminated by newline
+#   "\0\0\0\0\x05" (feature codes added in v1.03)
+#   Feature codes:
+#       1. Feature code, terminated by newline
 #   "\0\0\0\0\0"
 #
-# Feature Codes: (see http://www.geonames.org/export/codes.html#P for descriptions)
+# Feature Codes v1.02: (see http://www.geonames.org/export/codes.html#P for descriptions)
 #
 #       0. Other    3. PPLA2    6. PPLA5    9. PPLF    12. PPLR   15. PPLX
 #       1. PPL      4. PPLA3    7. PPLC    10. PPLG    13. PPLS
@@ -66,7 +70,7 @@ package Image::ExifTool::Geolocation;
 use strict;
 use vars qw($VERSION $geoDir $altDir $dbInfo);
 
-$VERSION = '1.04';  # (this is the module version number, not the database version)
+$VERSION = '1.07';  # (this is the module version number, not the database version)
 
 my $debug; # set to output processing time for testing
 
@@ -74,21 +78,19 @@ sub ReadDatabase($);
 sub SortDatabase($);
 sub AddEntry(@);
 sub GetEntry($;$$);
-sub Geolocate($;$$$$$);
+sub Geolocate($;$);
 
 my (@cityList, @countryList, @regionList, @subregionList, @timezoneList);
 my (%countryNum, %regionNum, %subregionNum, %timezoneNum); # reverse lookups
-my (@sortOrder, @altNames, %langLookup, $nCity);
+my (@sortOrder, @altNames, %langLookup, $nCity, %featureCodes);
 my ($lastArgs, %lastFound, @lastByPop, @lastByLat); # cached city matches
 my $dbVer = '1.03';
 my $sortedBy = 'Latitude';
 my $pi = 3.1415926536;
 my $earthRadius = 6371;    # earth radius in km
-
+# hard-coded feature codes for v1.02 database
 my @featureCodes = qw(Other PPL PPLA PPLA2 PPLA3 PPLA4 PPLA5 PPLC
                       PPLCH PPLF PPLG PPLL PPLR PPLS STLMT PPLX);
-my $i = 0;
-my %featureCodes = map { lc($_) => $i++ } @featureCodes;
 
 # get path name for database file from lib/Image/ExifTool/Geolocation.dat by default,
 # or according to $Image::ExifTool::Geolocation::directory if specified
@@ -107,12 +109,10 @@ unless (defined $geoDir and not $geoDir) {
     }
 }
 
-# set directory for language files
-my $geoLang;
-if ($geoDir and -d "$geoDir/GeoLang") {
-    $geoLang = "$geoDir/GeoLang";
-} elsif ($geoDir or not defined $geoDir) {
-    $geoLang = "$defaultDir/GeoLang";
+# set directory for language files and alternate names
+$geoDir = $defaultDir unless defined $geoDir;
+if (not defined $altDir and $geoDir and -e "$geoDir/AltNames.dat") {
+    $altDir = $geoDir;
 }
 
 # add user-defined entries to the database
@@ -144,7 +144,7 @@ sub ReadDatabase($)
         return 0;
     }
     my $comment = <DATFILE>;
-    defined $comment and $comment =~ /(\d+)/ or close(DATFILE), return 0;
+    defined $comment and $comment =~ / (\d+) / or close(DATFILE), return 0;
     $dbInfo = "$datfile v$dbVer: $nCity cities with population > $1";
     my $isUserDefined = @Image::ExifTool::UserDefined::Geolocation;
 
@@ -193,7 +193,21 @@ sub ReadDatabase($)
         push @timezoneList, $line;
         $timezoneNum{lc $line} = $#timezoneList if $isUserDefined;
     }
+    # read feature codes if available
+    if ($line eq "\0\0\0\0\x05\n") {
+        undef @featureCodes;
+        for (;;) {
+            $line = <DATFILE>;
+            last if length($line) == 6 and $line =~ /\0\0\0\0/;
+            chomp $line;
+            $line =~ s/ .*//;  # (hook to be able to add feature descriptions later)
+            push @featureCodes, $line;
+        }
+    }
     close DATFILE;
+    # initialize featureCodes lookup
+    $i = 0;
+    %featureCodes = map { lc($_) => $i++ } @featureCodes;
     return 1;
 }
 
@@ -229,10 +243,10 @@ sub ReadAltNames()
 # Clear last city matches cache
 sub ClearLastMatches()
 {
-    undef $lastArgs;
-    undef %lastFound;
-    undef @lastByPop;
-    undef @lastByLat;
+    undef $lastArgs;    # arguments in last call to Geolocate
+    undef %lastFound;   # keys are last matching city numbers, values are population codes
+    undef @lastByPop;   # last matching city numbers ordered by population
+    undef @lastByLat;   # last matching city numbers ordered by latitude
 }
 
 #------------------------------------------------------------------------------
@@ -274,7 +288,16 @@ sub AddEntry(@)
     my ($city, $region, $subregion, $cc, $country, $timezone, $fc, $pop, $lat, $lon, $altNames) = @_;
     @_ < 10 and warn("Too few arguments in $city definition (check for updated format)\n"), return 0;
     length($cc) != 2 and warn("Country code '${cc}' is not 2 characters\n"), return 0;
-    $fc = $featureCodes{lc $fc} || 0;
+    $fc =~ s/ .*//; # (allow for descriptions to be added after a space -- future feature?)
+    my $fn = $featureCodes{lc $fc};
+    unless (defined $fn) {
+        if ($dbVer eq '1.02' or @featureCodes > 0x3f or not length $fc) {
+            $fn = 0;
+        } else {
+            push @featureCodes, uc($fc);
+            $featureCodes{lc $fc} = $fn = $#featureCodes;
+        }
+    }
     chomp $lon; # (just in case it was read from file)
     # create reverse lookups for country/region/subregion/timezone if not done already
     # (eg. if the entries are being added manually instead of via UserDefined::Geolocation)
@@ -307,7 +330,7 @@ sub AddEntry(@)
     }
     my $sn = $subregionNum{lc $subregion};
     unless (defined $sn) {
-        my $max = $dbVer eq '1.02' ? 0x0fff : 0xffff;
+        my $max = $dbVer eq '1.02' ? 0x7fff : 0xffff;
         $#subregionList >= $max and warn("AddEntry: Too many subregions\n"), return 0;
         push @subregionList, $subregion;
         $sn = $subregionNum{lc $subregion} = $#subregionList;
@@ -320,13 +343,13 @@ sub AddEntry(@)
         if ($dbVer eq '1.02') {
             $sn |= 0x8000;
         } else {
-            $fc |= 0x80;
+            $fn |= 0x80;
         }
         $tn -= 256;
     }
     $lat = int(($lat + 90)  / 180 * 0x100000 + 0.5) & 0xfffff;
     $lon = int(($lon + 180) / 360 * 0x100000 + 0.5) & 0xfffff;
-    my $hdr = pack('nCnNnCC', $lat>>4, (($lat&0x0f)<<4)|($lon&0x0f), $lon>>4, $code, $sn, $tn, $fc);
+    my $hdr = pack('nCnNnCC', $lat>>4, (($lat&0x0f)<<4)|($lon&0x0f), $lon>>4, $code, $sn, $tn, $fn);
     push @cityList, "$hdr$city";
     # add altNames entry if provided
     if ($altNames) {
@@ -355,28 +378,28 @@ sub GetEntry($;$$)
     my ($entryNum, $lang, $sort) = @_;
     return() if $entryNum > $#cityList;
     $entryNum = $sortOrder[$entryNum] if $sort and @sortOrder > $entryNum;
-    my ($lt,$f,$ln,$code,$sn,$tn,$fc) = unpack('nCnNnCC', $cityList[$entryNum]);
+    my ($lt,$f,$ln,$code,$sn,$tn,$fn) = unpack('nCnNnCC', $cityList[$entryNum]);
     my $city = substr($cityList[$entryNum],13);
     my $ctry = $countryList[$code >> 24];
     my $rgn = $regionList[$code & 0x0fff];
     if ($dbVer eq '1.02') {
         $sn & 0x8000 and $tn += 256, $sn &= 0x7fff;
     } else {
-        $fc & 0x80 and $tn += 256;
+        $fn & 0x80 and $tn += 256;
     }
     my $sub = $subregionList[$sn];
     # convert population digits back into exponent format
     my $pop = (($code>>16 & 0x0f) . '.' . ($code>>12 & 0x0f) . 'e+' . ($code>>20 & 0x0f)) + 0;
     $lt = sprintf('%.4f', (($lt<<4)|($f >> 4))  * 180 / 0x100000 - 90);
     $ln = sprintf('%.4f', (($ln<<4)|($f & 0x0f))* 360 / 0x100000 - 180);
-    $fc = $featureCodes[$fc & 0x0f];
+    my $fc = $featureCodes[$fn & 0x3f] || 'Other';
     my $cc = substr($ctry, 0, 2);
     my $country = substr($ctry, 2);
     if ($lang) {
         my $xlat = $langLookup{$lang};
         # load language lookups if  not done already
         if (not defined $xlat) {
-            if (eval "require '$geoLang/$lang.pm'") {
+            if (eval "require '$geoDir/GeoLang/$lang.pm'") {
                 my $trans = "Image::ExifTool::GeoLang::${lang}::Translate";
                 no strict 'refs';
                 $xlat = \%$trans if %$trans;
@@ -429,17 +452,16 @@ sub GetAltNames($;$)
 # Look up lat,lon or city in geolocation database
 # Inputs: 0) "lat,lon", "city,region,country", etc, (city must be first)
 #         1) options hash reference (or undef for no options)
-# Options: GeolocMinPop, GeolocMaxDist, GeolocMulti, GeolocFeature, GeolocAltNames
-# Returns: 0) number of matching cities (0 if no matches),
-#          1) index of matching city in database, or undef if no matches, or
-#             reference to list of indices if multiple matches were found and
-#             the flag to return multiple matches was set,
-#          2) approx distance (km), 3) compass bearing to city
-sub Geolocate($;$$$$$)
+# Options: GeolocMinPop, GeolocMaxDist, GeolocMulti, GeolocFeature, GeolocAltNames,
+#          GeolocNearby
+# Returns: List of matching city information, empty if none found.
+#          Each element in the list is an array with 0=index of city in database,
+#          1=distance in km (or undef if no distance), 2=compass bearing (or undef)
+sub Geolocate($;$)
 {
     my ($arg, $opts) = @_;
     my ($city, @exact, %regex, @multiCity, $other, $idx, @cargs, $useLastFound);
-    my ($minPop, $minDistU, $minDistC, @matchParms, @coords, $fcmask, $both);
+    my ($minPop, $minDistU, $minDistC, @matchParms, @coords, %fcOK, $both);
     my ($pop, $maxDist, $multi, $fcodes, $altNames, @startTime);
 
     $opts and ($pop, $maxDist, $multi, $fcodes, $altNames) =
@@ -449,7 +471,7 @@ sub Geolocate($;$$$$$)
         require Time::HiRes;
         @startTime = Time::HiRes::gettimeofday();
     }
-    @cityList or warn('No Geolocation database'), return 0;
+    @cityList or warn('No Geolocation database'), return();
     # make population code for comparing with 2 bytes at offset 6 in database
     if ($pop) {
         $pop = sprintf('%.1e', $pop);
@@ -457,17 +479,18 @@ sub Geolocate($;$$$$$)
     }
     if ($fcodes) {
         my $neg = $fcodes =~ s/^-//;
-        my @fcodes = split /\s*,\s*/, $fcodes;
+        my @fcodes = split /\s*,-?\s*/, lc $fcodes;     # (allow leading dash on subsequent codes)
         if ($neg) {
-            $fcmask = 0xffff;
-            defined $featureCodes{lc $_} and $fcmask &= ~((1 << $featureCodes{lc $_})) foreach @fcodes;
+            $fcOK{$_} = 1 foreach 0..$#featureCodes;
+            defined $featureCodes{$_} and delete $fcOK{$featureCodes{$_}} foreach @fcodes;
         } else {
-            defined $featureCodes{lc $_} and $fcmask |= (1 << $featureCodes{lc $_}) foreach @fcodes;
+            defined $featureCodes{$_} and $fcOK{$featureCodes{$_}} = 1 foreach @fcodes;
         }
     }
 #
 # process input argument
 #
+    my $num = 1;
     $arg =~ s/^\s+//; $arg =~ s/\s+$//; # remove leading/trailing spaces
     my @args = split /\s*,\s*/, $arg;
     my %ri = ( cc => 0, co => 1, re => 2, sr => 3, ci => 8, '' => 9 );
@@ -486,6 +509,8 @@ sub Geolocate($;$$$$$)
             push @coords, $_ if @coords < 2;
         } elsif (lc $_ eq 'both') {
             $both = 1;
+        } elsif ($_ =~ /^num=(\d+)$/i) {
+            $num = $1;
         } elsif ($_) {
             push @cargs, $_;
             if ($city) {
@@ -497,7 +522,7 @@ sub Geolocate($;$$$$$)
     }
     unless (defined $city or @coords == 2) {
         warn("Insufficient information to determine geolocation\n");
-        return 0;
+        return();
     }
     # sort database by logitude if finding entry based on coordinates
     SortDatabase('Latitude') if @coords == 2 and ($both or not defined $city);
@@ -551,7 +576,7 @@ Entry:  for (; $i<@cityList; ++$i) {
                 $str !~ $_ or next Entry foreach @{$regex{19}};
             }
             # test feature code and population
-            next if $fcmask and not $fcmask & (1 << (ord(substr($cityList[$i],12,1)) & 0x0f));
+            next if $fcodes and not $fcOK{ord(substr($cityList[$i],12,1)) & 0x3f};
             my $pc = substr($cityList[$i],6,2);
             if (not defined $minPop or $pc ge $minPop) {
                 $lastFound{$i} = $pc;
@@ -561,16 +586,14 @@ Entry:  for (; $i<@cityList; ++$i) {
         @startTime and printf("= Processing time: %.3f sec\n", Time::HiRes::tv_interval(\@startTime));
         if (%lastFound) {
             @coords == 2 and $useLastFound = 1, last; # continue to use coords with last city matches
-            scalar(keys %lastFound) > 200 and warn("Too many matching cities\n"), return 0;
+            scalar(keys %lastFound) > 200 and warn("Too many matching cities\n"), return();
             unless (@lastByPop) {
                 @lastByPop = sort { $lastFound{$b} cmp $lastFound{$a} or $cityList[$a] cmp $cityList[$b] } keys %lastFound;
             }
-            my $n = scalar @lastByPop;
-            return($n, [ @lastByPop ]) if $n > 1 and $multi;
-            return($n, $lastByPop[0]);
+            return(\@lastByPop);
         }
         warn "No such city in Geolocation database\n";
-        return 0;
+        return();
     }
 #
 # determine Geolocation based on GPS coordinates
@@ -606,9 +629,11 @@ Entry:  for (; $i<@cityList; ++$i) {
     my ($inc, $end, $n) = (-1, -1, $n0+1);
     my ($p0, $t0) = ($lat*$pi/0x100000 - $pi/2, $lon*$pi/0x080000 - $pi);
     my $cp0 = cos($p0);
+    my (@matches, @rtnList, @dist);
+
     for (;;) {
         if (($n += $inc) == $end) {
-            last if $inc == 1;
+            last if $inc == 1 or $n0 == $n1;
             ($inc, $end, $n) = (1, $numEntries, $n1);
         }
         my $i = $sorted ? $$sorted[$n] : $n;
@@ -619,28 +644,56 @@ Entry:  for (; $i<@cityList; ++$i) {
         abs($lt - $lat) > $minDistC and $n = $end - $inc, next;
         # ignore if population is below threshold
         next if defined $minPop and $minPop ge substr($cityList[$i],6,2);
-        next if $fcmask and not $fcmask & (1 << (ord(substr($cityList[$i],12,1)) & 0x0f));
+        next if $fcodes and not $fcOK{ord(substr($cityList[$i],12,1)) & 0x3f};
         $ln = ($ln << 4) | ($f & 0x0f);
         # calculate great circle distance to this city on unit sphere
         my ($p1, $t1) = ($lt*$pi/0x100000 - $pi/2, $ln*$pi/0x080000 - $pi);
         my ($sp, $st) = (sin(($p1-$p0)/2), sin(($t1-$t0)/2));
         my $a = $sp * $sp + $cp0 * cos($p1) * $st * $st;
-        my $distU = atan2(sqrt($a), sqrt(1-$a));
+        my $distU = atan2(sqrt($a), sqrt(1-$a)); # distance on unit sphere
         next if $distU > $minDistU;
-        $minDistU = $distU;
-        $minDistC = $minDistU * 0x200000 / $pi;
         @matchParms = ($i, $p1, $t1, $distU);
+        if ($num <= 1) {
+            $minDistU = $distU;
+        } else {
+            my $j;
+            # add this entry into list of matching cities ordered by closest first
+            for ($j=0; $j<@matches; ++$j) {
+                last if $distU < $matches[$j][3];
+            }
+            if ($j < $#matches) {
+                splice @matches, $j, 0, [ @matchParms ];
+            } else {
+                $matches[$j] = [ @matchParms ];
+            }
+            # restrict list to the specified number of nearest cities
+            pop @matches if @matches > $num;
+            # update minimum distance with furthest match if we satisfied our quota
+            $minDistU = $matches[-1][3] if @matches >= $num;
+        }
+        $minDistC = $minDistU * 0x200000 / $pi;  # distance in scaled coordinate units
     }
-    @matchParms or warn("No suitable location in Geolocation database\n"), return 0;
-
-    # calculate distance in km and bearing to matching city
-    my ($ii, $p1, $t1, $distU) = @matchParms;
-    my $km = sprintf('%.2f', 2 * $earthRadius * $distU);
-    my $be = atan2(sin($t1-$t0)*cos($p1-$p0), $cp0*sin($p1)-sin($p0)*cos($p1)*cos($t1-$t0));
-    $be = int($be * 180 / $pi + 360.5) % 360; # convert from radians to integer degrees
+    @matchParms or warn("No suitable location in Geolocation database\n"), return();
+    $num = @matches;
 
     @startTime and printf("- Processing time: %.3f sec\n", Time::HiRes::tv_interval(\@startTime));
-    return(1, $ii, $km, $be)
+
+    for (;;) {
+        if ($num > 1) {
+            last unless @matches;
+            @matchParms = @{$matches[0]};
+            shift @matches;
+        }
+        # calculate distance in km and bearing to matching city
+        my ($ii, $p1, $t1, $distU) = @matchParms;
+        my $km = sprintf('%.2f', 2 * $earthRadius * $distU);
+        my $be = atan2(sin($t1-$t0)*cos($p1-$p0), $cp0*sin($p1)-sin($p0)*cos($p1)*cos($t1-$t0));
+        $be = int($be * 180 / $pi + 360.5) % 360; # convert from radians to integer degrees
+        push @rtnList, $ii;
+        push @dist, [ $km, $be ];
+        last if $num <= 1;
+    }
+    return(\@rtnList, \@dist);
 }
 
 1; #end
@@ -691,10 +744,10 @@ True on success.
 =head2 ReadAltNames
 
 Load the alternate names database.  Before calling this method the $altDir
-package variable must be set to a directory containing the AltNames.dat
-database that matches the current Geolocation.dat. This method is called
-automatically by L</Geolocate> if $altDir is set and the GeolocAltNames
-option is used and an input city name is provided.
+package variable may be set, otherwise AltNames.dat is loaded from the same
+directory as Geolocation.dat.  This method is called automatically by
+L</Geolocate> if the GeolocAltNames option is used and an input city name is
+provided.
 
     Image::ExifTool::Geolocation::ReadAltNames();
 
@@ -706,8 +759,8 @@ option is used and an input city name is provided.
 
 =item Return Value:
 
-True on success.  Resets the value of $altDir to prevent further attempts at
-re-loading the same database.
+True on success.  May be called repeatedly, but AltNames.dat is loaded only
+on the first call.
 
 =back
 
@@ -833,8 +886,7 @@ Comma-separated string of alternate names for this city.
 
 =item Notes:
 
-Must set the $altDir package variable and call L</ReadAltNames> before
-calling this routine.
+L</ReadAltNames> must be called before calling this routine.
 
 =back
 
@@ -854,37 +906,46 @@ zero or more of the following in any order, separated by commas: region
 name, subregion name, country code, and/or country name.  Regular
 expressions in C</expr/> format are also allowed, optionally prefixed by
 "ci", "re", "sr", "cc" or "co" to specifically match City, Region,
-Subregion, CountryCode or Country name.  See
-L<https://exiftool.org/geolocation.html#Read> for details.
+Subregion, CountryCode or Country name.  Two special controls may be added
+to the argument list:
+
+   'both'   - When search input includes both name and GPS coordinates, use
+              both to determine the closest city matching the specified
+              name(s) instead of using GPS only.
+
+   'num=##' - When the search includes GPS coordinates, return the nearest
+              ## cities instead of just the closest one.  Returned cities
+              are in the order from nearest to farthest.
+
+See L<https://exiftool.org/geolocation.html#Read> for more details.
 
 1) Optional reference to hash of options:
 
-   GeolocMinPop   - minimum population of cities to consider in search
+    GeolocMinPop   - Minimum population of cities to consider in search.
+                     Default 0.
 
-   GeolocMaxDist  - maximum distance (km) to search for cities when an input
-                    GPS position is used
+    GeolocMaxDist  - Maximum distance (km) to search for cities when an
+                     input GPS position is used.  Default infinity.
 
-   GeolocMulti    - flag to return multiple cities if there is more than one
-                    match.  In this case the return value is a list of city
-                    information lists.
+    GeolocMulti    - Flag to return multiple cities if there is more than
+                     one match.  Used in the case where no input GPS
+                     coordinates are provided.  Default 0.
 
-   GeolocFeature  - comma-separated list of feature codes to include in
-                    search, or exclude if the list starts with a dash (-)
+    GeolocFeature  - Comma-separated list of feature codes to include in
+                     search, or exclude if the list starts with a dash (-).
+                     Default undef.
 
-   GeolocAltNames - flag to search alternate names database if available
-                    for matching city name (see ALTERNATE DATABASES below)
+    GeolocAltNames - Flag to search alternate names database if available
+                     for matching city name (see ALTERNATE DATABASES below).
+                     Default undef.
 
-=item Return Value:
+=item Return Values:
 
-0) Number of matching entries, or 0 if no matches
+0) Reference to list of database entry numbers for matching cities, or undef
+if no matches were found.
 
-1) Entry number for matching city in database, or undef if no matches, or a
-reference to a list of entry numbers of matching cities if multiple matches
-were found and the flag was set to return multiple matches
-
-2) Distance to closest city in km if "lat,lon" specified
-
-3) Compass bearing for direction to closest city if "lat,lon" specified
+1) Reference to list of distance/bearing pairs for each matching city, or
+undef if the search didn't provide GPS coordinates.
 
 =back
 
@@ -896,11 +957,12 @@ contain the Geolocation.dat file, and optionally a GeoLang directory for the
 language translations.  The $geoDir variable may be set to an empty string
 to disable loading of a database.
 
-A database of alternate city names may be loaded by setting the package
-$altDir variable.  This directory should contain the AltNames.dat database
-that matches the version of Geolocation.dat being used.  When searching for
-a city by name, the alternate-names database is checked to provide
-additional possibilities for matches.
+When searching for a city by name, AltNames.dat is checked to provide
+additional possibilities for matches if the GeolocAltNames option is set and
+an AltNames.dat database exists.  The package $altDir variable may be set to
+specify a different directory for AltNames.dat, otherwise the
+Geolocation.dat directory is assumed.  The entries in AltNames.dat must
+match those in the currently loaded version of Geolocation.dat.
 
 =head1 ADDING USER-DEFINED DATABASE ENTRIES
 
@@ -911,7 +973,7 @@ technique before the Geolocation module is loaded.
         # city, region, subregion, country code, country, timezone,
         ['Sinemorets','burgas','Obshtina Tsarevo','BG','','Europe/Sofia',
         # feature code, population, lat, lon
-         '',400,42.06115,27.97833],
+         'PPL',400,42.06115,27.97833],
     );
 
 Similarly, user-defined language translations may be defined, and will

@@ -48,7 +48,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '2.95';
+$VERSION = '2.96';
 
 sub ProcessMOV($$;$);
 sub ProcessKeys($$$);
@@ -1415,6 +1415,8 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
         %durationInfo,
         # this is int64u if MovieHeaderVersion == 1 (ref 13)
         Hook => '$$self{MovieHeaderVersion} and $format = "int64u", $varSize += 4',
+        # (Note: this Duration seems to be the time of the key frame in
+        #  the NRT Metadata track of iPhone live-photo MOV videos)
     },
     5 => {
         Name => 'PreferredRate',
@@ -6494,6 +6496,9 @@ my %isImageData = ( av01 => 1, avc1 => 1, hvc1 => 1, lhv1 => 1, hvt1 => 1 );
     },
     ownr => 'Owner', #PH (obscure) (ref ChrisAdan private communication)
     'xid ' => 'ISRC', #PH
+    # found in DJI Osmo Action4 video
+    tnal => { Name => 'ThumbnailImage',  Groups => { 2 => 'Preview' } },
+    snal => { Name => 'PreviewImage',    Groups => { 2 => 'Preview' } },
 );
 
 # tag decoded from timed face records
