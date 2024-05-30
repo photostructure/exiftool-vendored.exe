@@ -6,15 +6,16 @@ use strict ;
 use warnings;
 use bytes;
 
-use IO::Compress::Base 2.086 ;
-use IO::Compress::Base::Common  2.086 qw(:Status );
-use IO::Compress::Adapter::Deflate 2.086 ;
+use IO::Compress::Base 2.100 ;
+use IO::Compress::Base::Common  2.100 qw(:Status :Parse);
+use IO::Compress::Adapter::Deflate 2.100 ;
+use Compress::Raw::Zlib  2.100 qw(Z_DEFLATED Z_DEFAULT_COMPRESSION Z_DEFAULT_STRATEGY);
 
 require Exporter ;
 
 our ($VERSION, @ISA, @EXPORT_OK, %DEFLATE_CONSTANTS, %EXPORT_TAGS, $RawDeflateError);
 
-$VERSION = '2.086';
+$VERSION = '2.100';
 $RawDeflateError = '';
 
 @ISA = qw(IO::Compress::Base Exporter);
@@ -28,8 +29,8 @@ push @EXPORT_OK, @IO::Compress::Adapter::Deflate::EXPORT_OK ;
     my %seen;
     foreach (keys %EXPORT_TAGS )
     {
-        push @{$EXPORT_TAGS{constants}}, 
-                 grep { !$seen{$_}++ } 
+        push @{$EXPORT_TAGS{constants}},
+                 grep { !$seen{$_}++ }
                  @{ $EXPORT_TAGS{$_} }
     }
     $EXPORT_TAGS{all} = $EXPORT_TAGS{constants} ;
@@ -41,7 +42,7 @@ push @EXPORT_OK, @IO::Compress::Adapter::Deflate::EXPORT_OK ;
 #push @{ $EXPORT_TAGS{all} }, @EXPORT_OK ;
 
 Exporter::export_ok_tags('all');
-              
+
 
 
 sub new
@@ -82,7 +83,7 @@ sub mkComp
    return $self->saveErrorString(undef, $errstr, $errno)
        if ! defined $obj;
 
-   return $obj;    
+   return $obj;
 }
 
 
@@ -116,8 +117,6 @@ sub getExtraParams
     return getZlibParams();
 }
 
-use IO::Compress::Base::Common  2.086 qw(:Parse);
-use Compress::Raw::Zlib  2.086 qw(Z_DEFLATED Z_DEFAULT_COMPRESSION Z_DEFAULT_STRATEGY);
 our %PARAMS = (
             #'method'   => [IO::Compress::Base::Common::Parse_unsigned,  Z_DEFLATED],
             'level'     => [IO::Compress::Base::Common::Parse_signed,    Z_DEFAULT_COMPRESSION],
@@ -125,17 +124,18 @@ our %PARAMS = (
 
             'crc32'     => [IO::Compress::Base::Common::Parse_boolean,   0],
             'adler32'   => [IO::Compress::Base::Common::Parse_boolean,   0],
-            'merge'     => [IO::Compress::Base::Common::Parse_boolean,   0], 
+            'merge'     => [IO::Compress::Base::Common::Parse_boolean,   0],
         );
-        
+
 sub getZlibParams
 {
-    return %PARAMS;    
+    return %PARAMS;
 }
 
 sub getInverseClass
 {
-    return ('IO::Uncompress::RawInflate', 
+    no warnings 'once';
+    return ('IO::Uncompress::RawInflate',
                 \$IO::Uncompress::RawInflate::RawInflateError);
 }
 
@@ -144,7 +144,7 @@ sub getFileInfo
     my $self = shift ;
     my $params = shift;
     my $file = shift ;
-    
+
 }
 
 use Fcntl qw(SEEK_SET);
@@ -156,20 +156,20 @@ sub createMerge
     my $outType = shift ;
 
     my ($invClass, $error_ref) = $self->getInverseClass();
-    eval "require $invClass" 
+    eval "require $invClass"
         or die "aaaahhhh" ;
 
-    my $inf = $invClass->new( $outValue, 
-                             Transparent => 0, 
+    my $inf = $invClass->new( $outValue,
+                             Transparent => 0,
                              #Strict     => 1,
                              AutoClose   => 0,
                              Scan        => 1)
        or return $self->saveErrorString(undef, "Cannot create InflateScan object: $$error_ref" ) ;
 
     my $end_offset = 0;
-    $inf->scan() 
+    $inf->scan()
         or return $self->saveErrorString(undef, "Error Scanning: $$error_ref", $inf->errorNo) ;
-    $inf->zap($end_offset) 
+    $inf->zap($end_offset)
         or return $self->saveErrorString(undef, "Error Zapping: $$error_ref", $inf->errorNo) ;
 
     my $def = *$self->{Compress} = $inf->createDeflate();
@@ -178,10 +178,10 @@ sub createMerge
     *$self->{UnCompSize} = *$inf->{UnCompSize}->clone();
     *$self->{CompSize} = *$inf->{CompSize}->clone();
     # TODO -- fix this
-    #*$self->{CompSize} = new U64(0, *$self->{UnCompSize_32bit});
+    #*$self->{CompSize} = U64->new(0, *$self->{UnCompSize_32bit});
 
 
-    if ( $outType eq 'buffer') 
+    if ( $outType eq 'buffer')
       { substr( ${ *$self->{Buffer} }, $end_offset) = '' }
     elsif ($outType eq 'handle' || $outType eq 'filename') {
         *$self->{FH} = *$inf->{FH} ;
@@ -189,8 +189,8 @@ sub createMerge
         *$self->{FH}->flush() ;
         *$self->{Handle} = 1 if $outType eq 'handle';
 
-        #seek(*$self->{FH}, $end_offset, SEEK_SET) 
-        *$self->{FH}->seek($end_offset, SEEK_SET) 
+        #seek(*$self->{FH}, $end_offset, SEEK_SET)
+        *$self->{FH}->seek($end_offset, SEEK_SET)
             or return $self->saveErrorString(undef, $!, $!) ;
     }
 
@@ -199,7 +199,7 @@ sub createMerge
 
 #### zlib specific methods
 
-sub deflateParams 
+sub deflateParams
 {
     my $self = shift ;
 
@@ -210,7 +210,7 @@ sub deflateParams
     return $self->saveErrorString(0, *$self->{Compress}{Error}, *$self->{Compress}{ErrorNo})
         if $status == STATUS_ERROR;
 
-    return 1;    
+    return 1;
 }
 
 
@@ -231,7 +231,7 @@ IO::Compress::RawDeflate - Write RFC 1951 files/buffers
     my $status = rawdeflate $input => $output [,OPTS]
         or die "rawdeflate failed: $RawDeflateError\n";
 
-    my $z = new IO::Compress::RawDeflate $output [,OPTS]
+    my $z = IO::Compress::RawDeflate->new( $output [,OPTS] )
         or die "rawdeflate failed: $RawDeflateError\n";
 
     $z->print($string);
@@ -265,7 +265,6 @@ IO::Compress::RawDeflate - Write RFC 1951 files/buffers
     binmode $z
     fileno $z
     close $z ;
- 
 
 =head1 DESCRIPTION
 
@@ -295,7 +294,8 @@ The functional interface needs Perl5.005 or better.
 =head2 rawdeflate $input_filename_or_reference => $output_filename_or_reference [, OPTS]
 
 C<rawdeflate> expects at least two parameters,
-C<$input_filename_or_reference> and C<$output_filename_or_reference>.
+C<$input_filename_or_reference> and C<$output_filename_or_reference>
+and zero or more optional parameters (see L</Optional Parameters>)
 
 =head3 The C<$input_filename_or_reference> parameter
 
@@ -308,7 +308,7 @@ It can take one of the following forms:
 
 =item A filename
 
-If the <$input_filename_or_reference> parameter is a simple scalar, it is
+If the C<$input_filename_or_reference> parameter is a simple scalar, it is
 assumed to be a filename. This file will be opened for reading and the
 input data will be read from it.
 
@@ -404,9 +404,9 @@ in C<$output_filename_or_reference> as a concatenated series of compressed data 
 
 =head2 Optional Parameters
 
-Unless specified below, the optional parameters for C<rawdeflate>,
-C<OPTS>, are the same as those used with the OO interface defined in the
-L</"Constructor Options"> section below.
+The optional parameters for the one-shot function C<rawdeflate>
+are (for the most part) identical to those used with the OO interface defined in the
+L</"Constructor Options"> section. The exceptions are listed below
 
 =over 5
 
@@ -474,6 +474,22 @@ Defaults to 0.
 
 =head2 Examples
 
+Here are a few example that show the capabilities of the module.
+
+=head3 Streaming
+
+This very simple command line example demonstrates the streaming capabilities of the module.
+The code reads data from STDIN, compresses it, and writes the compressed data to STDOUT.
+
+    $ echo hello world | perl -MIO::Compress::RawDeflate=rawdeflate -e 'rawdeflate \*STDIN => \*STDOUT' >output.1951
+
+The special filename "-" can be used as a standin for both C<\*STDIN> and C<\*STDOUT>,
+so the above can be rewritten as
+
+    $ echo hello world | perl -MIO::Compress::RawDeflate=rawdeflate -e 'rawdeflate "-" => "-"' >output.1951
+
+=head3 Compressing a file from the filesystem
+
 To read the contents of the file C<file1.txt> and write the compressed
 data to the file C<file1.txt.1951>.
 
@@ -485,6 +501,8 @@ data to the file C<file1.txt.1951>.
     rawdeflate $input => "$input.1951"
         or die "rawdeflate failed: $RawDeflateError\n";
 
+=head3 Reading from a Filehandle and writing to an in-memory buffer
+
 To read from an existing Perl filehandle, C<$input>, and write the
 compressed data to a buffer, C<$buffer>.
 
@@ -493,11 +511,13 @@ compressed data to a buffer, C<$buffer>.
     use IO::Compress::RawDeflate qw(rawdeflate $RawDeflateError) ;
     use IO::File ;
 
-    my $input = new IO::File "<file1.txt"
+    my $input = IO::File->new( "<file1.txt" )
         or die "Cannot open 'file1.txt': $!\n" ;
     my $buffer ;
     rawdeflate $input => \$buffer
         or die "rawdeflate failed: $RawDeflateError\n";
+
+=head3 Compressing multiple files
 
 To compress all files in the directory "/my/home" that match "*.txt"
 and store the compressed data in the same directory
@@ -528,7 +548,7 @@ and if you want to compress each file one at a time, this will do the trick
 
 The format of the constructor for C<IO::Compress::RawDeflate> is shown below
 
-    my $z = new IO::Compress::RawDeflate $output [,OPTS]
+    my $z = IO::Compress::RawDeflate->new( $output [,OPTS] )
         or die "IO::Compress::RawDeflate failed: $RawDeflateError\n";
 
 It returns an C<IO::Compress::RawDeflate> object on success and undef on failure.
@@ -573,7 +593,7 @@ return undef.
 
 =head2 Constructor Options
 
-C<OPTS> is any combination of the following options:
+C<OPTS> is any combination of zero or more the following options:
 
 =over 5
 
@@ -948,6 +968,12 @@ See L<IO::Compress::FAQ|IO::Compress::FAQ/"Apache::GZip Revisited">
 
 See L<IO::Compress::FAQ|IO::Compress::FAQ/"Compressed files and Net::FTP">
 
+=head1 SUPPORT
+
+General feedback/questions/bug reports should be sent to
+L<https://github.com/pmqs/IO-Compress/issues> (preferred) or
+L<https://rt.cpan.org/Public/Dist/Display.html?Name=IO-Compress>.
+
 =head1 SEE ALSO
 
 L<Compress::Zlib>, L<IO::Compress::Gzip>, L<IO::Uncompress::Gunzip>, L<IO::Compress::Deflate>, L<IO::Uncompress::Inflate>, L<IO::Uncompress::RawInflate>, L<IO::Compress::Bzip2>, L<IO::Uncompress::Bunzip2>, L<IO::Compress::Lzma>, L<IO::Uncompress::UnLzma>, L<IO::Compress::Xz>, L<IO::Uncompress::UnXz>, L<IO::Compress::Lzip>, L<IO::Uncompress::UnLzip>, L<IO::Compress::Lzop>, L<IO::Uncompress::UnLzop>, L<IO::Compress::Lzf>, L<IO::Uncompress::UnLzf>, L<IO::Compress::Zstd>, L<IO::Uncompress::UnZstd>, L<IO::Uncompress::AnyInflate>, L<IO::Uncompress::AnyUncompress>
@@ -981,8 +1007,7 @@ See the Changes file.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (c) 2005-2019 Paul Marquess. All rights reserved.
+Copyright (c) 2005-2021 Paul Marquess. All rights reserved.
 
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
-

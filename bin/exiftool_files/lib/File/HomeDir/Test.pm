@@ -13,7 +13,7 @@ use base "File::HomeDir::Driver";
 
 BEGIN
 {
-    $VERSION = '1.004';
+    $VERSION = '1.006';
     %DIR     = ();
     $ENABLED = 0;
 }
@@ -101,45 +101,4 @@ sub users_home
 
 __END__
 
-=pod
-
-=head1 NAME
-
-File::HomeDir::Test - Prevent the accidental creation of user-owned files during testing
-
-=head1 SYNOPSIS
-
-  use Test::More test => 1;
-  use File::HomeDir::Test;
-  use File::HomeDir;
-
-=head1 DESCRIPTION
-
-B<File::HomeDir::Test> is a L<File::HomeDir> driver intended for use in the test scripts
-of modules or applications that write files into user-owned directories.
-
-It is designed to prevent the pollution of user directories with files that are not part
-of the application install itself, but were created during testing. These files can leak
-state information from the tests into the run-time usage of an application, and on Unix
-systems also prevents tests (which may be executed as root via sudo) from writing files
-which cannot later be modified or removed by the regular user.
-
-=head1 SUPPORT
-
-See the support section of the main L<File::HomeDir> documentation.
-
-=head1 AUTHOR
-
-Adam Kennedy E<lt>adamk@cpan.orgE<gt>
-
-=head1 COPYRIGHT
-
-Copyright 2005 - 2011 Adam Kennedy.
-
-This program is free software; you can redistribute
-it and/or modify it under the same terms as Perl itself.
-
-The full text of the license can be found in the
-LICENSE file included with this module.
-
-=cut
+#line 148

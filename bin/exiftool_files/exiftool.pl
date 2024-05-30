@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '12.82';
+my $version = '12.85';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -748,6 +748,7 @@ for (;;) {
             push @isUTF8, 10 if $isAlt;
             for ($i=0; ; ++$i) {
                 my @entry = Image::ExifTool::Geolocation::GetEntry($i,$langOpt,1) or last;
+                $#entry = 9;    # remove everything after latitude (eg. feature type)
                 next if $minPop and $entry[7] < $minPop;
                 next if %fcodes and $neg ? $fcodes{lc $entry[6]} : not $fcodes{lc $entry[6]};
                 push @entry, Image::ExifTool::Geolocation::GetAltNames($i,1) if $isAlt;
@@ -1179,7 +1180,7 @@ for (;;) {
     if (/^p(-?)$/ or /^printformat(-?)$/i) {
         my $fmt = shift;
         if ($pass) {
-            LoadPrintFormat($fmt, $1);
+            LoadPrintFormat($fmt, $1 || $binaryOutput);
             # load MWG module now if necessary
             if (not $useMWG and grep /^mwg:/i, @requestTags) {
                 $useMWG = 1;
@@ -2241,6 +2242,14 @@ sub GetImageInfo($$)
         if (%printFmt) {
             $et->Options(Duplicates => 1);
             $et->Options(RequestTags => \@requestTags);
+            if ($printFmt{SetTags}) {
+                # initialize options so we can set any tags we want
+                $$et{TAGS_FROM_FILE} = 1;
+                $et->Options(MakerNotes => 1);
+                $et->Options(Struct => 2);
+                $et->Options(List => 1);
+                $et->Options(CoordFormat => '%d %d %.8f') unless $et->Options('CoordFormat');
+            }
         } else {
             @foundTags = @tags;
         }
@@ -2293,8 +2302,8 @@ sub GetImageInfo($$)
         # output using print format file (-p) option
         my ($type, $doc, $grp, $lastDoc, $cache);
         $fileTrailer = '';
-        # repeat for each embedded document if necessary
-        if ($et->Options('ExtractEmbedded')) {
+        # repeat for each sub-document if necessary
+        if ($$et{DOC_COUNT}) {
             # (cache tag keys if there are sub-documents)
             $lastDoc = $$et{DOC_COUNT} and $cache = { };
         } else {
@@ -4118,6 +4127,7 @@ sub AddPrintFormat($)
     push @{$printFmt{$type}}, $expr;
     # add to list of requested tags
     push @requestTags, $expr =~ /\$\{?((?:[-\w]+:)*[-\w?*]+)/g;
+    $printFmt{SetTags} = 1 if $expr =~ /\bSetTags\b/;
 }
 
 #------------------------------------------------------------------------------
@@ -4719,50 +4729,50 @@ DESCRIPTION
 
       File Types
       ------------+-------------+-------------+-------------+------------
-      360   r/w   | DOCX  r     | ITC   r     | O     r     | RSRC  r
-      3FR   r     | DPX   r     | J2C   r     | ODP   r     | RTF   r
-      3G2   r/w   | DR4   r/w/c | JNG   r/w   | ODS   r     | RW2   r/w
-      3GP   r/w   | DSS   r     | JP2   r/w   | ODT   r     | RWL   r/w
-      7Z    r     | DV    r     | JPEG  r/w   | OFR   r     | RWZ   r
-      A     r     | DVB   r/w   | JSON  r     | OGG   r     | RM    r
-      AA    r     | DVR-MS r    | JXL   r/w   | OGV   r     | SEQ   r
-      AAC   r     | DYLIB r     | K25   r     | ONP   r     | SKETCH r
-      AAE   r     | EIP   r     | KDC   r     | OPUS  r     | SO    r
-      AAX   r/w   | EPS   r/w   | KEY   r     | ORF   r/w   | SR2   r/w
-      ACR   r     | EPUB  r     | LA    r     | ORI   r/w   | SRF   r
-      AFM   r     | ERF   r/w   | LFP   r     | OTF   r     | SRW   r/w
-      AI    r/w   | EXE   r     | LIF   r     | PAC   r     | SVG   r
-      AIFF  r     | EXIF  r/w/c | LNK   r     | PAGES r     | SWF   r
-      APE   r     | EXR   r     | LRV   r/w   | PBM   r/w   | THM   r/w
-      ARQ   r/w   | EXV   r/w/c | M2TS  r     | PCD   r     | TIFF  r/w
-      ARW   r/w   | F4A/V r/w   | M4A/V r/w   | PCX   r     | TORRENT r
-      ASF   r     | FFF   r/w   | MACOS r     | PDB   r     | TTC   r
-      AVI   r     | FITS  r     | MAX   r     | PDF   r/w   | TTF   r
-      AVIF  r/w   | FLA   r     | MEF   r/w   | PEF   r/w   | TXT   r
-      AZW   r     | FLAC  r     | MIE   r/w/c | PFA   r     | VCF   r
-      BMP   r     | FLIF  r/w   | MIFF  r     | PFB   r     | VNT   r
-      BPG   r     | FLV   r     | MKA   r     | PFM   r     | VRD   r/w/c
-      BTF   r     | FPF   r     | MKS   r     | PGF   r     | VSD   r
-      C2PA  r     | FPX   r     | MKV   r     | PGM   r/w   | WAV   r
-      CHM   r     | GIF   r/w   | MNG   r/w   | PLIST r     | WDP   r/w
-      COS   r     | GLV   r/w   | MOBI  r     | PICT  r     | WEBP  r/w
-      CR2   r/w   | GPR   r/w   | MODD  r     | PMP   r     | WEBM  r
-      CR3   r/w   | GZ    r     | MOI   r     | PNG   r/w   | WMA   r
-      CRM   r/w   | HDP   r/w   | MOS   r/w   | PPM   r/w   | WMV   r
-      CRW   r/w   | HDR   r     | MOV   r/w   | PPT   r     | WPG   r
-      CS1   r/w   | HEIC  r/w   | MP3   r     | PPTX  r     | WTV   r
-      CSV   r     | HEIF  r/w   | MP4   r/w   | PS    r/w   | WV    r
-      CUR   r     | HTML  r     | MPC   r     | PSB   r/w   | X3F   r/w
-      CZI   r     | ICC   r/w/c | MPG   r     | PSD   r/w   | XCF   r
-      DCM   r     | ICO   r     | MPO   r/w   | PSP   r     | XISF  r
-      DCP   r/w   | ICS   r     | MQV   r/w   | QTIF  r/w   | XLS   r
-      DCR   r     | IDML  r     | MRC   r     | R3D   r     | XLSX  r
-      DFONT r     | IIQ   r/w   | MRW   r/w   | RA    r     | XMP   r/w/c
-      DIVX  r     | IND   r/w   | MXF   r     | RAF   r/w   | ZIP   r
-      DJVU  r     | INSP  r/w   | NEF   r/w   | RAM   r     |
-      DLL   r     | INSV  r     | NKSC  r/w   | RAR   r     |
-      DNG   r/w   | INX   r     | NRW   r/w   | RAW   r/w   |
-      DOC   r     | ISO   r     | NUMBERS r   | RIFF  r     |
+      360   r/w   | DOCX  r     | ITC   r     | NUMBERS r   | RAW   r/w
+      3FR   r     | DPX   r     | J2C   r     | NXD   r     | RIFF  r
+      3G2   r/w   | DR4   r/w/c | JNG   r/w   | O     r     | RSRC  r
+      3GP   r/w   | DSS   r     | JP2   r/w   | ODP   r     | RTF   r
+      7Z    r     | DV    r     | JPEG  r/w   | ODS   r     | RW2   r/w
+      A     r     | DVB   r/w   | JSON  r     | ODT   r     | RWL   r/w
+      AA    r     | DVR-MS r    | JXL   r/w   | OFR   r     | RWZ   r
+      AAC   r     | DYLIB r     | K25   r     | OGG   r     | RM    r
+      AAE   r     | EIP   r     | KDC   r     | OGV   r     | SEQ   r
+      AAX   r/w   | EPS   r/w   | KEY   r     | ONP   r     | SKETCH r
+      ACR   r     | EPUB  r     | LA    r     | OPUS  r     | SO    r
+      AFM   r     | ERF   r/w   | LFP   r     | ORF   r/w   | SR2   r/w
+      AI    r/w   | EXE   r     | LIF   r     | ORI   r/w   | SRF   r
+      AIFF  r     | EXIF  r/w/c | LNK   r     | OTF   r     | SRW   r/w
+      APE   r     | EXR   r     | LRV   r/w   | PAC   r     | SVG   r
+      ARQ   r/w   | EXV   r/w/c | M2TS  r     | PAGES r     | SWF   r
+      ARW   r/w   | F4A/V r/w   | M4A/V r/w   | PBM   r/w   | THM   r/w
+      ASF   r     | FFF   r/w   | MACOS r     | PCD   r     | TIFF  r/w
+      AVI   r     | FITS  r     | MAX   r     | PCX   r     | TORRENT r
+      AVIF  r/w   | FLA   r     | MEF   r/w   | PDB   r     | TTC   r
+      AZW   r     | FLAC  r     | MIE   r/w/c | PDF   r/w   | TTF   r
+      BMP   r     | FLIF  r/w   | MIFF  r     | PEF   r/w   | TXT   r
+      BPG   r     | FLV   r     | MKA   r     | PFA   r     | VCF   r
+      BTF   r     | FPF   r     | MKS   r     | PFB   r     | VNT   r
+      C2PA  r     | FPX   r     | MKV   r     | PFM   r     | VRD   r/w/c
+      CHM   r     | GIF   r/w   | MNG   r/w   | PGF   r     | VSD   r
+      COS   r     | GLV   r/w   | MOBI  r     | PGM   r/w   | WAV   r
+      CR2   r/w   | GPR   r/w   | MODD  r     | PLIST r     | WDP   r/w
+      CR3   r/w   | GZ    r     | MOI   r     | PICT  r     | WEBP  r/w
+      CRM   r/w   | HDP   r/w   | MOS   r/w   | PMP   r     | WEBM  r
+      CRW   r/w   | HDR   r     | MOV   r/w   | PNG   r/w   | WMA   r
+      CS1   r/w   | HEIC  r/w   | MP3   r     | PPM   r/w   | WMV   r
+      CSV   r     | HEIF  r/w   | MP4   r/w   | PPT   r     | WPG   r
+      CUR   r     | HTML  r     | MPC   r     | PPTX  r     | WTV   r
+      CZI   r     | ICC   r/w/c | MPG   r     | PS    r/w   | WV    r
+      DCM   r     | ICO   r     | MPO   r/w   | PSB   r/w   | X3F   r/w
+      DCP   r/w   | ICS   r     | MQV   r/w   | PSD   r/w   | XCF   r
+      DCR   r     | IDML  r     | MRC   r     | PSP   r     | XISF  r
+      DFONT r     | IIQ   r/w   | MRW   r/w   | QTIF  r/w   | XLS   r
+      DIVX  r     | IND   r/w   | MXF   r     | R3D   r     | XLSX  r
+      DJVU  r     | INSP  r/w   | NEF   r/w   | RA    r     | XMP   r/w/c
+      DLL   r     | INSV  r     | NKA   r     | RAF   r/w   | ZIP   r
+      DNG   r/w   | INX   r     | NKSC  r/w   | RAM   r     |
+      DOC   r     | ISO   r     | NRW   r/w   | RAR   r     |
 
       Meta Information
       ----------------------+----------------------+---------------------
@@ -5664,7 +5674,7 @@ OPTIONS
          character, hyphen, underline, colon or number sign). Use $$ to
          represent a "$" symbol, and $/ for a newline. When the string
          argument is used (ie. *STR*), a newline is added to the end of the
-         string unless -p- is specified.
+         string unless -p- is specified or the -b option is used.
 
          Multiple -p options may be used. Lines beginning with "#[HEAD]" and
          "#[TAIL]" are output before the first processed file and after the
@@ -5691,7 +5701,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 12.82 --
+             -- Generated by ExifTool 12.85 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -5932,11 +5942,12 @@ OPTIONS
          a sequential number to be added to output file names, even if the
          names are different. For %C, a copy number of zero is not omitted
          as it is with %c. A leading '-' causes the number to be reset at
-         the start of each new directory, and '+' has no effect. The number
-         before the decimal place gives the starting index, the number after
-         the decimal place gives the field width. The following examples
-         show the output filenames when used with the command "exiftool
-         rose.jpg star.jpg jet.jpg ...":
+         the start of each new directory (in the original directory
+         structure if the files are being moved), and '+' has no effect. The
+         number before the decimal place gives the starting index, the
+         number after the decimal place gives the field width. The following
+         examples show the output filenames when used with the command
+         "exiftool rose.jpg star.jpg jet.jpg ...":
 
              -w %C%f.txt       # 0rose.txt, 1star.txt, 2jet.txt
              -w %f-%10C.txt    # rose-10.txt, star-11.txt, jet-12.txt
@@ -6910,6 +6921,19 @@ OPTIONS
     feature would be:
 
         exiftool -tagsfromfile @ -keywords -api nodups a.jpg
+
+    "SetTags"
+
+    Used to set tags in extracted images. With no arguments, copies all tags
+    from the source file to the embedded image:
+
+        exiftool -p '${previewimage;SetTags}' -b a.arw > preview.jpg
+
+    Arguments may be added to copy or set specific tags. Arguments take
+    exactly the same form as those on the command line when copying or
+    writing tags, but without the leading dash. For example:
+
+        exiftool -p '${previewimage;SetTags("comment=test","title<filename")}' ...
 
 WINDOWS UNICODE FILE NAMES
     In Windows, command-line arguments are specified using the current code

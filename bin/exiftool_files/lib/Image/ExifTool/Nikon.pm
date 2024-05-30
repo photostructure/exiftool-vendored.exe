@@ -65,7 +65,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 use Image::ExifTool::XMP;
 
-$VERSION = '4.32';
+$VERSION = '4.34';
 
 sub LensIDConv($$$);
 sub ProcessNikonAVI($$$);
@@ -5506,13 +5506,14 @@ my %nikonFocalConversions = (
             37 => 'Nikkor Z 600mm f/4 TC VR S', #28
             38 => 'Nikkor Z 85mm f/1.2 S', #28
             39 => 'Nikkor Z 17-28mm f/2.8', #IB
-            40 => 'NIKKOR Z 26mm f/2.8', #28
-            41 => 'NIKKOR Z DX 12-28mm f/3.5-5.6 PZ VR', #28
+            40 => 'Nikkor Z 26mm f/2.8', #28
+            41 => 'Nikkor Z DX 12-28mm f/3.5-5.6 PZ VR', #28
             42 => 'Nikkor Z 180-600mm f/5.6-6.3 VR', #30
-            43 => 'NIKKOR Z DX 24mm f/1.7', #28
-            44 => 'NIKKOR Z 70-180mm f/2.8', #28
-            45 => 'NIKKOR Z 600mm f/6.3 VR S', #28
+            43 => 'Nikkor Z DX 24mm f/1.7', #28
+            44 => 'Nikkor Z 70-180mm f/2.8', #28
+            45 => 'Nikkor Z 600mm f/6.3 VR S', #28
             46 => 'Nikkor Z 135mm f/1.8 S Plena', #28
+            48 => 'Nikkor Z 28-400mm f/4-8 VR', #30
             32768 => 'Nikkor Z 400mm f/2.8 TC VR S TC-1.4x', #28
             32769 => 'Nikkor Z 600mm f/4 TC VR S TC-1.4x', #28
         },
@@ -13685,6 +13686,24 @@ sub ProcessNikonCaptureOffsets($$$)
         ) and $success = 1;
     }
     return $success;
+}
+
+#------------------------------------------------------------------------------
+# Read Nikon NKA file
+# Inputs: 0) ExifTool ref, 1) dirInfo ref
+# Returns: 1 on success
+sub ProcessNKA($$)
+{
+    my ($et, $dirInfo) = @_;
+    my $raf = $$et{RAF};
+    my $buff;
+    $raf->Read($buff, 0x35) == 0x35 or return 0;
+    my $len = unpack('x49V', $buff);
+    $raf->Read($buff, $len) == $len or return 0;
+    $et->SetFileType('NKA', 'application/x-nikon-nxstudio');
+    my %dirInfo = ( DataPt => \$buff, DataPos => 0x35 );
+    my $tagTablePtr = GetTagTable('Image::ExifTool::XMP::XML');
+    return $et->ProcessDirectory(\%dirInfo, $tagTablePtr);
 }
 
 #------------------------------------------------------------------------------

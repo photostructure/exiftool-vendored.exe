@@ -2,7 +2,7 @@ package Math::BigInt::LTM;
 
 use strict;
 use warnings;
-our $VERSION = '0.063';
+our $VERSION = '0.069';
 
 use CryptX;
 use Carp;
@@ -883,26 +883,4 @@ sub _as_hex {
 
 1;
 
-=pod
-
-=head1 NAME
-
-Math::BigInt::LTM - Use the libtommath library for Math::BigInt routines
-
-=head1 SYNOPSIS
-
- use Math::BigInt lib => 'LTM';
-
- ## See Math::BigInt docs for usage.
-
-=head1 DESCRIPTION
-
-Provides support for big integer calculations by means of the libtommath c-library.
-
-I<Since: CryptX-0.029>
-
-=head1 SEE ALSO
-
-L<Math::BigInt>, L<https://github.com/libtom/libtommath>
-
-=cut
+#line 909

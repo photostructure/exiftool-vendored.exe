@@ -168,7 +168,8 @@ sub ConvInvISO6709($)
         # requires at least 3 digits after the decimal point
         # (and as of Apr 2021, Google Photos doesn't accept coordinats
         #  with more than 5 digits after the decimal place:
-        #  https://exiftool.org/forum/index.php?topic=11055.msg67171#msg67171 )
+        #  https://exiftool.org/forum/index.php?topic=11055.msg67171#msg67171 
+        #  still a problem Apr 2024: https://exiftool.org/forum/index.php?msg=85761)
         my @fmt = ('%s%02d.%s%s','%s%03d.%s%s','%s%d.%s%s');
         my @limit = (90,180);
         foreach (@a) {
@@ -875,7 +876,8 @@ sub WriteQuickTime($$$)
                 # --> hold this terminator to the end
                 $term = $hdr;
             } elsif ($n != 0) {
-                $et->Error("Unknown $n bytes at end of file", 1);
+                # warn unless this is 1-3 pad bytes
+                $et->Error("Unknown $n bytes at end of file", 1) if $n > 3 or $hdr ne "\0" x $n;
             }
             last;
         }

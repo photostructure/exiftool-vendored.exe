@@ -18,7 +18,7 @@ use base "File::HomeDir::Unix";
 
 BEGIN
 {
-    $VERSION = '1.004';
+    $VERSION = '1.006';
 }
 
 # xdg uses $ENV{XDG_CONFIG_HOME}/user-dirs.dirs to know where are the
@@ -80,64 +80,4 @@ sub users_data      { Carp::croak('The users_data method is not available on an 
 
 1;
 
-=pod
-
-=head1 NAME
-
-File::HomeDir::FreeDesktop - Find your home and other directories on FreeDesktop.org Unix
-
-=head1 DESCRIPTION
-
-This module provides implementations for determining common user
-directories.  In normal usage this module will always be
-used via L<File::HomeDir>.
-
-This module can operate only when the command C<xdg-user-dir> is available
-and executable, which is typically achieved by installed a package named
-C<xdg-user-dirs> or similar.
-
-One can find the latest spec at L<https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html>.
-
-=head1 SYNOPSIS
-
-  use File::HomeDir;
-  
-  # Find directories for the current user
-  $home     = File::HomeDir->my_home;        # /home/mylogin
-  $desktop  = File::HomeDir->my_desktop;
-  $docs     = File::HomeDir->my_documents;
-  $music    = File::HomeDir->my_music;
-  $pics     = File::HomeDir->my_pictures;
-  $videos   = File::HomeDir->my_videos;
-  $data     = File::HomeDir->my_data;
-  $config   = File::HomeDir->my_config;
-  
-  # Some undocumented ones, expect they don't work - use with caution
-  $download    = File::HomeDir->my_download;
-  $publicshare = File::HomeDir->my_publicshare;
-  $templates   = File::HomeDir->my_templates;
-  $cache       = File::HomeDir->my_cache;
-
-=head1 AUTHORS
-
-Jerome Quelin E<lt>jquellin@cpan.org<gt>
-
-Adam Kennedy E<lt>adamk@cpan.orgE<gt>
-
-=head1 SEE ALSO
-
-L<File::HomeDir>, L<File::HomeDir::Win32> (legacy)
-
-=head1 COPYRIGHT
-
-Copyright 2009 - 2011 Jerome Quelin.
-
-Some parts copyright 2010 Adam Kennedy.
-
-This program is free software; you can redistribute
-it and/or modify it under the same terms as Perl itself.
-
-The full text of the license can be found in the
-LICENSE file included with this module.
-
-=cut
+#line 146

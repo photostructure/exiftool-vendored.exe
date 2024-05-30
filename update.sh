@@ -28,7 +28,7 @@ DEST=.dl/et.zip
 if [ ! -f $DEST ]; then
   curl -o $DEST https://oliverbetz.de/cms/files/Artikel/ExifTool-for-Windows/exiftool-12.82_64.zip
 fi
-echo "89a43e0e3c1b3145e44bc6b56ea66baddf35af8aed9828afcaf7ebfaebdd9998 \*$DEST" | sha256sum -c
+echo "89a43e0e3c1b3145e44bc6b56ea66baddf35af8aed9828afcaf7ebfaebdd9998 $DEST" | sha256sum -c
 
 unzip -q $DEST -d bin
 (
