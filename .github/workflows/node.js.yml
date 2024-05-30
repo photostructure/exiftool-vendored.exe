@@ -14,7 +14,8 @@ jobs:
       matrix:
         # macos and linux are tested with exiftool-vendored.pl:
         os: [windows-latest]
-        node-version: [18.x, 20.x, 21.x]
+        # See https://github.com/nodejs/release#release-schedule
+        node-version: [18.x, 20.x, 22.x]
 
     steps:
     - uses: actions/checkout@v4
