@@ -27,8 +27,7 @@
   "scripts": {
     "prettier": "prettier --write test/*.js",
     "test": "mocha",
-    "sign": "node ./sign.js",
-    "update": "ncu --upgrade --install always && bash -c ./update.sh"
+    "update": "ncu --upgrade --install always && ./update.js"
   },
   "release-it": {
     "hooks": {
@@ -42,10 +41,12 @@
     }
   },
   "devDependencies": {
-    "@electron/windows-sign": "^1.1.2",
-    "mocha": "^10.4.0",
+    "axios": "^1.7.2",
+    "mocha": "^10.6.0",
     "npm-check-updates": "^16.14.20",
-    "prettier": "^3.2.5",
-    "release-it": "^17.3.0"
+    "prettier": "^3.3.2",
+    "release-it": "^17.5.0",
+    "unzipper": "^0.12.1",
+    "xml2js": "^0.6.2"
   }
 }
