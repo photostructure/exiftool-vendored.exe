@@ -599,7 +599,7 @@ use the OO version; e.g.:
 
 =head1 VERSION
 
-$Id: Scalar.pm,v 1.1 2024/07/10 13:48:25 dh_us6f3d Exp $
+$Id: Scalar.pm,v 1.6 2005/02/10 21:21:53 dfs Exp $
 
 
 =head1 AUTHORS
