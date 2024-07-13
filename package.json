@@ -25,9 +25,10 @@
   "author": "Matthew McEachen <matthew-exiftoolvendored@mceachen.org>",
   "license": "MIT",
   "scripts": {
-    "prettier": "prettier --write test/*.js",
+    "prettier": "prettier --write *.js test/*.js",
     "test": "mocha",
-    "update": "ncu --upgrade --install always && ./update.js"
+    "preupdate": "ncu --upgrade --install always",
+    "update": "node update.js"
   },
   "release-it": {
     "hooks": {
