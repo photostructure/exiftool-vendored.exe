@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 
+const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { createWriteStream, createReadStream } = require("node:fs");
 const { mkdir, rm, rename, stat } = require("node:fs/promises");
@@ -72,27 +73,52 @@ function computeSHA256(path) {
   });
 }
 
+/**
+ * @param {string | URL | Request} url
+ * @param {string} basename
+ * @param {string} dir
+ * @param {string} sha256
+ */
+async function wget(url, basename, dir, sha256) {
+  await mkdir(dir, { recursive: true });
+  const out = join(dir, basename);
+  try {
+    const s = await stat(out);
+    if (s.isFile() && (await computeSHA256(out)) === sha256) {
+      console.log("Already downloaded: " + out);
+      return out;
+    }
+  } catch (e) {
+    if (e.code !== "ENOENT") {
+      throw e;
+    }
+  }
+  await rm(out, { force: true });
+  console.log("Fetching ", { url, out });
+  const response = await fetch(url);
+  if (response.body == null) {
+    throw new Error("Response body from fetch(" + url + ") is null");
+  }
+  await asyncPipeline(response.body, createWriteStream(out));
+  const actualSha256 = await computeSHA256(out);
+  console.log("SHA256:", { expected: sha256, actual: actualSha256 });
+  if (actualSha256 !== sha256) {
+    throw new Error("SHA256 hash mismatch");
+  }
+
+  return out;
+}
+
 async function run() {
   const enc = await fetchLatestEnclosure();
-  const url = new URL(enc.url);
-  const basename = url.pathname.split("/").at(-1);
+  const u = new URL(enc.url);
+  const basename = u.pathname.split("/").at(-1);
   if (basename == null) {
-    throw new Error("Invalid basename from enclosure: " + JSON.stringify(enc));
+    throw new Error("Invalid basename from URL: " + enc.url);
   }
   const expectedSha256 = await fetchLatestSHA256(basename);
-
-  const dlDir = join(__dirname, ".dl");
-
-  await mkdir(dlDir, { recursive: true });
-  const zipPath = join(dlDir, basename);
-  const dlStream = createWriteStream(zipPath);
-  console.log("Fetching ", { url: enc.url, out: zipPath });
-  const response = await fetch(enc.url);
-  if (response.body == null) {
-    throw new Error("Response body from fetch(" + enc.url + ") is null");
-  }
-  await asyncPipeline(response.body, dlStream);
-
+  const dir = join(__dirname, ".dl");
+  const zipPath = await wget(enc.url, basename, dir, expectedSha256);
   const expectedFileSize = parseInt(enc.length);
   const actualFileSize = (await stat(zipPath)).size;
   if (actualFileSize !== expectedFileSize) {
@@ -107,17 +133,11 @@ async function run() {
     );
   }
 
-  const actualSha256 = await computeSHA256(zipPath);
-  console.log("SHA256:", { expected: expectedSha256, actual: actualSha256 });
-  if (actualSha256 !== expectedSha256) {
-    throw new Error("SHA256 hash mismatch");
-  }
-
-  const expectedZipOutDir = join(dlDir, basename.replace(/\.zip$/, ""));
+  const expectedZipOutDir = join(dir, basename.replace(/\.zip$/, ""));
   await rm(expectedZipOutDir, { recursive: true, force: true });
   await asyncPipeline(
     createReadStream(zipPath),
-    unzipper.Extract({ path: dlDir }),
+    unzipper.Extract({ path: dir }),
   );
   const destDir = join(__dirname, "bin");
   await rm(destDir, { recursive: true, force: true });
@@ -126,7 +146,20 @@ async function run() {
     join(__dirname, "bin", "exiftool(-k).exe"),
     join(__dirname, "bin", "exiftool.exe"),
   );
-  console.log("Success!");
+
+  const version = spawnSync(join(__dirname, "bin", "exiftool.exe"), ["-ver"])
+    .stdout.toString()
+    .trim();
+
+  const pkgVer = version + ".0-pre";
+
+  console.log("Updating package.json to version " + pkgVer);
+
+  spawnSync("yarn", ["version", " --new-version", pkgVer], {
+    shell: true,
+    // UGLY HACK https://github.com/yarnpkg/yarn/issues/1228
+    env: { YARN_VERSION_GIT_TAG: "" },
+  });
 }
 
 run();
