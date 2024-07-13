@@ -12,7 +12,7 @@ meta information extracted from or written to a file.
 =head1 TAG TABLES
 
 The tables listed below give the names of all tags recognized by ExifTool.
-They contain a total of 27859 tags, with 17442 unique tag names.
+They contain a total of 27892 tags, with 17459 unique tag names.
 
 B<Tag ID>, B<Index#> or B<Sequence> is given in the first column of each
 table.  A B<Tag ID> is the computer-readable equivalent of a tag name, and
@@ -1390,6 +1390,7 @@ L<http://www.adobe.com/devnet/xmp/> for the official XMP specification.
   fpv                                           XMP fpv
   GAudio                                        XMP GAudio
   GCamera                                       XMP GCamera
+  GContainer                                    XMP GContainer
   GCreations                                    XMP GCreations
   GDepth                                        XMP GDepth
   getty                                         XMP GettyImages
@@ -4794,6 +4795,7 @@ These tags belong to the ExifTool XMP-GCamera family 1 group.
   BurstID                                       string
   BurstPrimary                                  string
   DisableAutoCreation                           string+
+  DisableSuggestedAction                        string+
   HDRPMakerNote                                 string
   HdrPlusMakernote                              string
   MicroVideo                                    integer
@@ -4808,6 +4810,42 @@ These tags belong to the ExifTool XMP-GCamera family 1 group.
   PortraitVersion                               string
   ShotLogData                                   string
   SpecialTypeID                                 string+
+
+=head3 XMP GContainer Tags
+
+Google Container namespace.  ExifTool uses the prefix 'GContainer' instead
+of 'Container' to avoid a conflict with the Google Device Container
+namespace.
+
+These tags belong to the ExifTool XMP-GContainer family 1 group.
+
+  Tag Name                                      Writable
+  --------                                      --------
+  ContainerDirectory                            Directory Struct+
+  DirectoryItem                                 Item Struct_+
+  DirectoryItemLabel                            string_+
+  DirectoryItemLength                           integer_+
+  DirectoryItemMime                             string_+
+  DirectoryItemPadding                          integer_+
+  DirectoryItemSemantic                         string_+
+  DirectoryItemURI                              string_+
+
+=head3 XMP Directory Struct
+
+  Field Name                                    Writable
+  ----------                                    --------
+  Item                                          Item Struct
+
+=head3 XMP Item Struct
+
+  Field Name                                    Writable
+  ----------                                    --------
+  Label                                         string
+  Length                                        integer
+  Mime                                          string
+  Padding                                       integer
+  Semantic                                      string
+  URI                                           string
 
 =head3 XMP GCreations Tags
 
@@ -8052,19 +8090,23 @@ Flash information tags for the K10D, K20D and K200D.
   Index1   Tag Name                             Writable
   ------   --------                             --------
     0.1    PowerSource                          int8u & 0x0f
-           Tag01                                int8u & 0x0f
+    0.2    PowerAvailable                       int8u & 0xf0
     1.1    BodyBatteryState                     int8u & 0xf0
-           BodyBatteryState?                    int8u & 0xf0
     1.2    GripBatteryState                     int8u & 0x0f
-           GripBatteryState?                    int8u & 0x0f
       2    BodyBatteryADNoLoad                  int8u
            BodyBatteryVoltage1                  int16u
+           BodyBatteryState                     int8u
       3    BodyBatteryADLoad                    int8u
+           BodyBatteryPercent                   int8u
       4    GripBatteryADNoLoad                  int8u
            BodyBatteryVoltage2                  int16u
+           BodyBatteryVoltage                   int32u
       5    GripBatteryADLoad                    int8u
       6    BodyBatteryVoltage3                  int16u
       8    BodyBatteryVoltage4                  int16u
+     16    GripBatteryState                     int8u
+     17    GripBatteryPercent                   int8u
+     18    GripBatteryVoltage                   int32u
 
 =head3 Pentax AFInfo Tags
 
@@ -8236,6 +8278,7 @@ Tags decoded from the electronic level information for the K-3 III.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
+      1    CameraOrientation                    int8s
       3    RollAngle                            int16s
       5    PitchAngle                           int16s
 
@@ -9311,6 +9354,7 @@ Unknown only to reduce the volume of the normal output.
   0x4026   LogInfo                              Canon LogInfo
   0x4028   AFConfig                             Canon AFConfig
   0x403f   RawBurstModeRoll                     Canon RawBurstInfo
+  0x4059   LevelInfo                            Canon LevelInfo
 
 =head3 Canon CameraSettings Tags
 
@@ -10197,7 +10241,7 @@ CameraInfo tags for the EOS 1000D.
 
 =head3 Canon CameraInfoR6 Tags
 
-CameraInfo tags for the EOS R6.
+CameraInfo tags for the EOS R5 and R6.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
@@ -11539,6 +11583,8 @@ Information about creative filter settings.
      17    VFDisplayIllumination                int32s
      18    AFStatusViewfinder                   int32s
      19    InitialAFPointInServo                int32s
+     20    SubjectToDetect                      int32s
+     24    EyeDetection                         int32s
 
 =head3 Canon RawBurstInfo Tags
 
@@ -11546,6 +11592,16 @@ Information about creative filter settings.
   ------   --------                             --------
       1    RawBurstImageNum                     int32u
       2    RawBurstImageCount                   int32u
+
+=head3 Canon LevelInfo Tags
+
+  Index4   Tag Name                             Writable
+  ------   --------                             --------
+      4    RollAngle                            int32s
+      5    PitchAngle                           int32s
+      7    FocalLength                          int32s
+      8    MinFocalLength                       int32s
+      9    MaxFocalLength                       int32s
 
 =head3 Canon CTMD Tags
 
@@ -13315,6 +13371,15 @@ Face recognition information.
   Face8Birthday                                 no
   Face8Category                                 no
   Face8Name                                     no
+
+=head3 FujiFilm RAFHeader Tags
+
+Tags extracted from the header of RAF images.
+
+  Index1   Tag Name                             Writable
+  ------   --------                             --------
+     60    RAFVersion                           no
+    108    RAFCompression                       no
 
 =head3 FujiFilm RAF Tags
 
@@ -15948,7 +16013,7 @@ Tags written by some Nikon GPS-equipped cameras like the AW100.
   Index1   Tag Name                             Writable
   ------   --------                             --------
       0    FirmwareVersion51                    no
-     10    NEFCompression                       int16u[0.5]
+     10    NEFCompression                       int16u
 
 =head3 Nikon MakerNotes0x56 Tags
 
@@ -19839,23 +19904,23 @@ any information found here will be extracted, even if the tag is not listed.
   Tag ID   Tag Name                             Writable
   ------   --------                             --------
   0x0000   ImageProcessingVersion               undef[4]
-  0x0100   WB_RBLevels                          int16u[2]
-  0x0102   WB_RBLevels3000K                     int16u[2]
-  0x0103   WB_RBLevels3300K                     int16u[2]
-  0x0104   WB_RBLevels3600K                     int16u[2]
-  0x0105   WB_RBLevels3900K                     int16u[2]
-  0x0106   WB_RBLevels4000K                     int16u[2]
-  0x0107   WB_RBLevels4300K                     int16u[2]
-  0x0108   WB_RBLevels4500K                     int16u[2]
-  0x0109   WB_RBLevels4800K                     int16u[2]
-  0x010a   WB_RBLevels5300K                     int16u[2]
-  0x010b   WB_RBLevels6000K                     int16u[2]
-  0x010c   WB_RBLevels6600K                     int16u[2]
-  0x010d   WB_RBLevels7500K                     int16u[2]
-  0x010e   WB_RBLevelsCWB1                      int16u[2]
-  0x010f   WB_RBLevelsCWB2                      int16u[2]
-  0x0110   WB_RBLevelsCWB3                      int16u[2]
-  0x0111   WB_RBLevelsCWB4                      int16u[2]
+  0x0100   WB_RBLevels                          int16u[n]
+  0x0102   WB_RBLevels3000K                     int16u[n]
+  0x0103   WB_RBLevels3300K                     int16u[n]
+  0x0104   WB_RBLevels3600K                     int16u[n]
+  0x0105   WB_RBLevels3900K                     int16u[n]
+  0x0106   WB_RBLevels4000K                     int16u[n]
+  0x0107   WB_RBLevels4300K                     int16u[n]
+  0x0108   WB_RBLevels4500K                     int16u[n]
+  0x0109   WB_RBLevels4800K                     int16u[n]
+  0x010a   WB_RBLevels5300K                     int16u[n]
+  0x010b   WB_RBLevels6000K                     int16u[n]
+  0x010c   WB_RBLevels6600K                     int16u[n]
+  0x010d   WB_RBLevels7500K                     int16u[n]
+  0x010e   WB_RBLevelsCWB1                      int16u[n]
+  0x010f   WB_RBLevelsCWB2                      int16u[n]
+  0x0110   WB_RBLevelsCWB3                      int16u[n]
+  0x0111   WB_RBLevelsCWB4                      int16u[n]
   0x0113   WB_GLevel3000K                       int16u
   0x0114   WB_GLevel3300K                       int16u
   0x0115   WB_GLevel3600K                       int16u
@@ -20228,6 +20293,7 @@ These tags are found in IFD0 of Panasonic/Leica RAW, RW2 and RWL images.
   0x0030   CropLeft                             int16u
   0x0031   CropBottom                           int16u
   0x0032   CropRight                            int16u
+  0x0037   ISO                                  int32u
   0x010f   Make                                 string
   0x0110   Model                                string
   0x0111   StripOffsets                         no
@@ -23188,7 +23254,8 @@ The following tags are decoded in unsupported maker notes.  Use the Unknown
 
 The main DNG tags are found in the EXIF table.  The tables below define only
 information found within structures of these main DNG tag values.  See
-L<http://www.adobe.com/products/dng/> for the official DNG specification.
+L<https://helpx.adobe.com/camera-raw/digital-negative.html> for the official
+DNG specification.
 
 =head3 DNG AdobeData Tags
 
@@ -23609,7 +23676,7 @@ These tags are used in Minolta RAW format (MRW) images.
       4    WBMode                               int8u~
       5    ProgramMode                          int8u
       6    ISOSetting                           int8u
-      7    ColorMode                            int32u[0.25]
+      7    ColorMode                            int8u
       8    WB_RBLevelsTungsten                  int16u[2]
      12    WB_RBLevelsDaylight                  int16u[2]
      16    WB_RBLevelsCloudy                    int16u[2]
@@ -25750,7 +25817,7 @@ the image undisplayable.
       2    ColorSpecApproximation               int8s!
       3    ICC_Profile                          ICC_Profile
            ColorSpace                           int32u!
-           ColorSpecData                        undef!
+           ColorSpecData                        undef[$size-3]!
 
 =head3 Jpeg2000 FileType Tags
 
@@ -29146,7 +29213,7 @@ ID3 version 2.2 tags.  (These are the tags written by iTunes 5.0.)
   'TT2'    Title                                no
   'TT3'    Subtitle                             no
   'TXT'    Lyricist                             no
-  'TXX'    TXX                                  ID3 UserDefined
+  'TXX'    UserDefinedText                      no
   'TYE'    Year                                 no
   'ULT'    Lyrics                               no
   'WAF'    FileURL                              no
@@ -29155,7 +29222,7 @@ ID3 version 2.2 tags.  (These are the tags written by iTunes 5.0.)
   'WCM'    CommercialURL                        no
   'WCP'    CopyrightURL                         no
   'WPB'    PublisherURL                         no
-  'WXX'    WXX                                  ID3 UserDefined
+  'WXX'    UserDefinedURL                       no
 
 =head3 ID3 SynLyrics Tags
 
@@ -29166,15 +29233,6 @@ The following tags are extracted from synchronized lyrics/text frames.
   SynchronizedLyricsDescription                 no
   SynchronizedLyricsText                        no+
   SynchronizedLyricsType                        no
-
-=head3 ID3 UserDefined Tags
-
-ID3 user-defined text and URL tags will be dynamically added to this table
-by name when found.
-
-  Tag ID   Tag Name                             Writable
-  ------   --------                             --------
-  [no tags known]
 
 =head3 ID3 v2_3 Tags
 
@@ -29245,7 +29303,7 @@ software.
   'TSOC'   ComposerSortOrder                    no
   'TSRC'   ISRC                                 no
   'TSSE'   EncoderSettings                      no
-  'TXXX'   TXXX                                 ID3 UserDefined
+  'TXXX'   UserDefinedText                      no
   'TYER'   Year                                 no
   'USER'   TermsOfUse                           no
   'USLT'   Lyrics                               no
@@ -29258,7 +29316,7 @@ software.
   'WORS'   InternetRadioStationURL              no
   'WPAY'   PaymentURL                           no
   'WPUB'   PublisherURL                         no
-  'WXXX'   WXXX                                 ID3 UserDefined
+  'WXXX'   UserDefinedURL                       no
   'XDOR'   OriginalReleaseTime                  no
   'XOLY'   OlympusDSS                           Olympus DSS
   'XSOA'   AlbumSortOrder                       no
@@ -29369,7 +29427,7 @@ software.
   'TSRC'   ISRC                                 no
   'TSSE'   EncoderSettings                      no
   'TSST'   SetSubtitle                          no
-  'TXXX'   TXXX                                 ID3 UserDefined
+  'TXXX'   UserDefinedText                      no
   'USER'   TermsOfUse                           no
   'USLT'   Lyrics                               no
   'WCOM'   CommercialURL                        no
@@ -29381,7 +29439,7 @@ software.
   'WORS'   InternetRadioStationURL              no
   'WPAY'   PaymentURL                           no
   'WPUB'   PublisherURL                         no
-  'WXXX'   WXXX                                 ID3 UserDefined
+  'WXXX'   UserDefinedURL                       no
   'XDOR'   OriginalReleaseTime                  no
   'XOLY'   OlympusDSS                           Olympus DSS
   'XSOA'   AlbumSortOrder                       no
@@ -29441,11 +29499,11 @@ parameters, as well as proprietary information written by many camera
 models.  Tags with a question mark after their name are not extracted unless
 the Unknown option is set.
 
-When writing, ExifTool creates both QuickTime and XMP tags by default, but
-the group may be specified to write one or the other separately.  If no
-location is specified, newly created QuickTime tags are added in the
-L<ItemList|Image::ExifTool::TagNames/QuickTime ItemList Tags> location if
-possible, otherwise in
+When writing video files, ExifTool creates both QuickTime and XMP tags by
+default, but the group may be specified to write one or the other
+separately.  If no location is specified, newly created QuickTime tags are
+added in the L<ItemList|Image::ExifTool::TagNames/QuickTime ItemList Tags>
+location if possible, otherwise in
 L<UserData|Image::ExifTool::TagNames/QuickTime UserData Tags>, and
 finally in L<Keys|Image::ExifTool::TagNames/QuickTime Keys Tags>,
 but this order may be changed by setting the PREFERRED level of the
@@ -29496,7 +29554,7 @@ the original size by padding with nulls if necessary.
 
 See
 L<https://developer.apple.com/library/archive/documentation/QuickTime/QTFF/>
-for the official specification.
+for the official QuickTime specification.
 
   Tag ID               Tag Name                 Writable
   ------               --------                 --------
@@ -29568,6 +29626,7 @@ currently reads 74 different formats of timed GPS metadata from video files.
   CameraModel                                   no
   Car                                           no
   DateTimeOriginal                              no
+  DateTimeStamp                                 no
   Distance                                      no
   ExposureCompensation                          no
   ExposureTime                                  no
@@ -30765,7 +30824,7 @@ the config file.
   'RDTC'       RicohRDTC                        Ricoh RDTC
   'RDTG'       RicohRDTG                        Ricoh RDTG
   'RDTL'       RicohRDTL                        Ricoh RDTL
-  'RICO'       RicohInfo                        EXIF
+  'RICO'       RicohInfo                        JPEG
   'RMKN'       RicohRMKN                        EXIF
   'RTHU'       PreviewImage                     no
   'SDLN'       PlayMode                         string
@@ -32678,7 +32737,8 @@ Other tags are extracted with the Unknown option.
 
 The following tags are extracted from Matroska multimedia container files.
 This container format is used by file types such as MKA, MKV, MKS and WEBM.
-For speed, by default ExifTool extracts tags only up to the first Cluster.
+For speed, by default ExifTool extracts tags only up to the first Cluster
+unless a Seek element specifies the position of a Tags element after this.
 However, the Verbose (-v) and Unknown = 2 (-U) options force processing of
 Cluster data, and the ExtractEmbedded (-ee) option skips over Clusters to
 read subsequent tags.  See
@@ -40126,6 +40186,7 @@ FileName.
   PreviewTIFF                File               no
   PreviewWMF                 File               no
   ProcessingTime             ExifTool           no
+  RAFCompression             File               no
   RAFVersion                 File               no
   ResourceForkSize           System             no
   SphericalVideoXML          GSpherical         yes!

@@ -1,4 +1,4 @@
-# $Header: /home/fergal/my/cvs/Test-Tester/lib/Test/Tester/CaptureRunner.pm,v 1.3 2003/03/05 01:07:55 fergal Exp $
+# $Header: /home/dh_us6f3d/cvs/exiftool2/windows/exiftool_64/exiftool_files/lib/Test/Tester/CaptureRunner.pm,v 1.1 2024/07/10 13:48:25 dh_us6f3d Exp $
 use strict;
 
 package Test::Tester::CaptureRunner;
