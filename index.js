@@ -1,3 +1,3 @@
-const path = require('path');
+const path = require("path");
 
-module.exports = path.join(__dirname, 'bin', 'exiftool.exe');
+module.exports = path.join(__dirname, "bin", "exiftool.exe");
