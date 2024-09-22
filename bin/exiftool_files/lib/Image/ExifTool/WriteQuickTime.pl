@@ -847,7 +847,7 @@ sub WriteQuickTime($$$)
     $et or return 1;    # allow dummy access to autoload this package
     my ($mdat, @mdat, @mdatEdit, $edit, $track, $outBuff, $co, $term, $delCount);
     my (%langTags, $canCreate, $delGrp, %boxPos, %didDir, $writeLast, $err, $atomCount);
-    my ($tag, $lastTag, $errStr);
+    my ($tag, $lastTag, $lastPos, $errStr, $trailer, $buf2);
     my $outfile = $$dirInfo{OutFile} || return 0;
     my $raf = $$dirInfo{RAF};       # (will be null for lower-level atoms)
     my $dataPt = $$dirInfo{DataPt}; # (will be null for top-level atoms)
@@ -860,6 +860,16 @@ sub WriteQuickTime($$$)
     my $createKeys = 0;
     my ($rtnVal, $rtnErr) = $dataPt ? (undef, undef) : (1, 0);
 
+    # check for Insta360 trailer at top level
+    if ($raf) {
+        my $pos = $raf->Tell();
+        if ($raf->Seek(-40, 2) and $raf->Read($buf2, 40) == 40 and
+            substr($buf2, 8) eq '8db42d694ccc418790edff439fe026bf')
+        {
+            $trailer = [ 'Insta360', $raf->Tell() - unpack('V',$buf2) ];
+        }
+        $raf->Seek($pos, 0) or return 0;
+    }
     if ($dataPt) {
         $raf = File::RandomAccess->new($dataPt);
     } else {
@@ -923,6 +933,12 @@ sub WriteQuickTime($$$)
     $tag = $lastTag = '';
 
     for (;;) {      # loop through all atoms at this level
+        $lastPos = $raf->Tell();
+        # stop processing if we reached a known trailer
+        if ($trailer and $lastPos >= $$trailer[1]) {
+            $errStr = "Corrupted $$trailer[0] trailer" if $lastPos != $$trailer[1];
+            last;
+        }
         $lastTag = $tag if $$tagTablePtr{$tag};    # keep track of last known tag
         if (defined $atomCount and --$atomCount < 0 and $dataPt) {
             # stop processing now and just copy the rest of the atom
@@ -1526,13 +1542,15 @@ sub WriteQuickTime($$$)
         if (($lastTag eq 'mdat' or $lastTag eq 'moov') and not $dataPt and (not $$tagTablePtr{$tag} or
             ref $$tagTablePtr{$tag} eq 'HASH' and $$tagTablePtr{$tag}{Unknown}))
         {
-            my $nvTrail = $et->GetNewValueHash($Image::ExifTool::Extra{Trailer});
-            if ($$et{DEL_GROUP}{Trailer} or ($nvTrail and not ($$nvTrail{Value} and $$nvTrail{Value}[0]))) {
-                $errStr =~ s/ is too large.*//;
-                $et->Warn('Deleted unknown trailer with ' . lcfirst($errStr));
+            # identify other known trailers
+            $buf2 = '';
+            $raf->Seek($lastPos,0) and $raf->Read($buf2,8);
+            if ($buf2 eq 'CCCCCCCC') {
+                $trailer = [ 'Kenwood', $lastPos ];
+            } elsif ($buf2 =~ /^(gpsa|gps0|gsen|gsea)...\0/s) {
+                $trailer = [ 'RIFF', $lastPos ];
             } else {
-                $et->Warn('Unknown trailer with ' . lcfirst($errStr));
-                $et->Error('Use "-trailer=" to delete unknown trailer');
+                $trailer = [ 'Unknown', $lastPos ];
             }
         } else {
             $et->Error($errStr);
@@ -1645,27 +1663,26 @@ sub WriteQuickTime($$$)
             }
             my $subName = $$subdir{DirName} || $$tagInfo{Name};
             # QuickTime hierarchy is complex, so check full directory path before adding
-            my $buff;
             if ($createKeys and $curPath eq 'MOV-Movie' and $subName eq 'Meta') {
                 $et->VPrint(0, "  Creating Meta with mdta Handler and Keys\n");
                 # init Meta box for Keys tags with mdta Handler and empty Keys+ItemList
-                $buff = "\0\0\0\x20hdlr\0\0\0\0\0\0\0\0mdta\0\0\0\0\0\0\0\0\0\0\0\0" .
+                $buf2 = "\0\0\0\x20hdlr\0\0\0\0\0\0\0\0mdta\0\0\0\0\0\0\0\0\0\0\0\0" .
                         "\0\0\0\x10keys\0\0\0\0\0\0\0\0" .
                         "\0\0\0\x08ilst";
             } elsif ($createKeys and $curPath eq 'MOV-Movie-Meta') {
-                $buff = ($subName eq 'Keys' ? "\0\0\0\0\0\0\0\0" : '');
+                $buf2 = ($subName eq 'Keys' ? "\0\0\0\0\0\0\0\0" : '');
             } elsif ($subName eq 'Meta' and $$et{OPTIONS}{QuickTimeHandler}) {
                 $et->VPrint(0, "  Creating Meta with mdir Handler\n");
                 # init Meta box for ItemList tags with mdir Handler
-                $buff = "\0\0\0\x20hdlr\0\0\0\0\0\0\0\0mdir\0\0\0\0\0\0\0\0\0\0\0\0";
+                $buf2 = "\0\0\0\x20hdlr\0\0\0\0\0\0\0\0mdir\0\0\0\0\0\0\0\0\0\0\0\0";
             } else {
                 next unless $curPath eq $writePath and $$addDirs{$subName} and $$addDirs{$subName} eq $dirName;
-                $buff = '';  # write from scratch
+                $buf2 = '';  # write from scratch
             }
             my %subdirInfo = (
                 Parent   => $dirName,
                 DirName  => $subName,
-                DataPt   => \$buff,
+                DataPt   => \$buf2,
                 DirStart => 0,
                 HasData  => $$subdir{HasData},
                 OutFile  => $outfile,
@@ -1978,9 +1995,8 @@ sub WriteQuickTime($$$)
                 $result or $et->Error("Truncated mdat atom"), last;
             } else {
                 # mdat continues to end of file
-                my $buff;
-                while ($raf->Read($buff, 65536)) {
-                    Write($outfile, $buff) or $rtnVal = 0, last;
+                while ($raf->Read($buf2, 65536)) {
+                    Write($outfile, $buf2) or $rtnVal = 0, last;
                 }
             }
         }
@@ -1989,6 +2005,22 @@ sub WriteQuickTime($$$)
     # write the stuff that must come last
     Write($outfile, $writeLast) or $rtnVal = 0 if $writeLast;
 
+    # copy trailer if necessary
+    if ($rtnVal and $trailer) {
+        # are we deleting the trailer?
+        my $nvTrail = $et->GetNewValueHash($Image::ExifTool::Extra{Trailer});
+        if ($$et{DEL_GROUP}{Trailer} or ($nvTrail and not ($$nvTrail{Value} and $$nvTrail{Value}[0]))) {
+            $et->Warn("Deleted $$trailer[0] trailer", 1);
+        } elsif ($raf->Seek($$trailer[1])) {
+            $et->Warn(sprintf('Copying %s trailer from offset 0x%x', @$trailer), 1);
+            while ($raf->Read($buf2, 65536)) {
+                Write($outfile, $buf2) or $rtnVal = 0, last;
+            }
+        } else {
+            $rtnVal = 0;
+        }
+        $rtnVal or $et->Error("Error copying $$trailer[0] trailer");
+    }
     return $rtnVal;
 }
 
