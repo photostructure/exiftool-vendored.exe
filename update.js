@@ -134,13 +134,13 @@ async function run() {
   }
 
   const expectedZipOutDir = join(dir, basename.replace(/\.zip$/, ""));
-  await rm(expectedZipOutDir, { recursive: true, force: true });
+  await rm(expectedZipOutDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
   await asyncPipeline(
     createReadStream(zipPath),
     unzipper.Extract({ path: dir }),
   );
   const destDir = join(__dirname, "bin");
-  await rm(destDir, { recursive: true, force: true });
+  await rm(destDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
   await rename(expectedZipOutDir, destDir);
   await rename(
     join(__dirname, "bin", "exiftool(-k).exe"),
