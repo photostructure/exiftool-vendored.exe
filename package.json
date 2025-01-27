@@ -42,11 +42,11 @@
     }
   },
   "devDependencies": {
-    "axios": "^1.7.7",
-    "mocha": "^10.8.0",
-    "npm-check-updates": "^17.1.9",
-    "prettier": "^3.3.3",
-    "release-it": "^17.10.0",
+    "axios": "^1.7.9",
+    "mocha": "^11.1.0",
+    "npm-check-updates": "^17.1.14",
+    "prettier": "^3.4.2",
+    "release-it": "^18.1.2",
     "unzipper": "^0.12.3",
     "xml2js": "^0.6.2"
   }
