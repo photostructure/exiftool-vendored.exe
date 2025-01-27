@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '13.00';
+my $version = '13.16';
 
 # add our 'lib' directory to the include list BEFORE 'use Image::ExifTool'
 my $exePath;
@@ -54,6 +54,7 @@ sub AddSetTagsFile($;$);
 sub Warning($$);
 sub DoSetFromFile($$$);
 sub CleanFilename($);
+sub HasWildcards($);
 sub SetWindowTitle($);
 sub ProcessFiles($;$);
 sub ScanDir($$;$);
@@ -609,6 +610,10 @@ if (@Image::ExifTool::UserDefined::Arguments) {
     unshift @ARGV, @Image::ExifTool::UserDefined::Arguments;
 }
 
+if ($version ne $Image::ExifTool::VERSION) {
+    Warn "Application version $version does not match Image::ExifTool library version $Image::ExifTool::VERSION\n";
+}
+
 # parse command-line options in 2 passes...
 # pass 1: set all of our ExifTool options
 # pass 2: print all of our help and informational output (-list, -ver, etc)
@@ -649,7 +654,7 @@ for (;;) {
         }
         # require MWG module if used in any argument
         # (note: doesn't cover the -p option because these tags will be parsed on the 2nd pass)
-        $useMWG = 1 if not $useMWG and grep /^mwg:/i, @tags, @requestTags;
+        $useMWG = 1 if not $useMWG and grep /^([--_0-9A-Z]+:)*1?mwg:/i, @tags, @requestTags;
         if ($useMWG) {
             require Image::ExifTool::MWG;
             Image::ExifTool::MWG::Load();
@@ -869,7 +874,7 @@ for (;;) {
         } else {
             print "Available API Options:\n";
             my $availableOptions = Image::ExifTool::AvailableOptions();
-            printf("  %-17s - %s\n", $$_[0], $$_[2]) foreach @$availableOptions;
+            $$_[3] or printf("  %-17s - %s\n", $$_[0], $$_[2]) foreach @$availableOptions;
             $helped = 1;
         }
         next;
@@ -1052,7 +1057,7 @@ for (;;) {
         }
         $trkfile or Error("Expecting file name for -geotag option\n"), $badCmd=1, next;
         # allow wildcards in filename
-        if ($trkfile =~ /[*?]/) {
+        if (HasWildcards($trkfile)) {
             # CORE::glob() splits on white space, so use File::Glob if possible
             my @trks;
             if ($^O eq 'MSWin32' and eval { require Win32::FindFile }) {
@@ -1101,7 +1106,7 @@ for (;;) {
         # prevent processing file unnecessarily for simple case of failed '$ok' or 'not $ok'
         $cond =~ /^\s*(not\s*)\$ok\s*$/i and ($1 xor $rtnValPrev) and $failCondition=1;
         # add to list of requested tags
-        push @requestTags, $cond =~ /\$\{?((?:[-\w]+:)*[-\w?*]+)/g;
+        push @requestTags, $cond =~ /\$\{?((?:[-_0-9A-Z]+:)*[-_0-9A-Z?*]+)/ig;
         push @condition, $cond;
         next;
     }
@@ -1189,7 +1194,7 @@ for (;;) {
         if ($pass) {
             LoadPrintFormat($fmt, $1 || $binaryOutput);
             # load MWG module now if necessary
-            if (not $useMWG and grep /^mwg:/i, @requestTags) {
+            if (not $useMWG and grep /^([-_0-9A-Z]+:)*1?mwg:/i, @requestTags) {
                 $useMWG = 1;
                 require Image::ExifTool::MWG;
                 Image::ExifTool::MWG::Load();
@@ -1388,11 +1393,11 @@ for (;;) {
             push @newValues, { SaveCount => ++$saveCount };
         }
         push @newValues, $_;
-        if (/^mwg:/i) {
+        if (/^([-_0-9A-Z]+:)*1?mwg:/i) {
             $useMWG = 1;
-        } elsif (/^([-\w]+:)*(filename|directory|testname)\b/i) {
+        } elsif (/^([-_0-9A-Z]+:)*(filename|directory|testname)\b/i) {
             $doSetFileName = 1;
-        } elsif (/^([-\w]+:)*(geotag|geotime|geosync|geolocate)\b/i) {
+        } elsif (/^([-_0-9A-Z]+:)*(geotag|geotime|geosync|geolocate)\b/i) {
             if (lc $2 eq 'geotime') {
                 $addGeotime = '';
             } else {
@@ -1410,25 +1415,23 @@ for (;;) {
         if ($setTagsFile) {
             push @{$setTags{$setTagsFile}}, $_;
             if ($1 eq '>') {
-                $useMWG = 1 if /^(.*>\s*)?mwg:/si;
+                $useMWG = 1 if /^(.*>\s*)?([-_0-9A-Z]+:)*1?mwg:/si;
                 if (/\b(filename|directory|testname)#?$/i) {
                     $doSetFileName = 1;
                 } elsif (/\bgeotime#?$/i) {
                     $addGeotime = '';
                 }
             } else {
-                $useMWG = 1 if /^([^<]+<\s*(.*\$\{?)?)?mwg:/si;
-                if (/^([-\w]+:)*(filename|directory|testname)\b/i) {
+                $useMWG = 1 if /^([^<]+<\s*(.*\$\{?)?)?([-_0-9A-Z]+:)*1?mwg:/si;
+                if (/^([-_0-9A-Z]+:)*(filename|directory|testname)\b/i) {
                     $doSetFileName = 1;
-                } elsif (/^([-\w]+:)*geotime\b/i) {
+                } elsif (/^([-_0-9A-Z]+:)*geotime\b/i) {
                     $addGeotime = '';
                 }
             }
         } else {
             my $lst = s/^-// ? \@exclude : \@tags;
-            unless (/^([-\w*]+:)*([-\w*?]+)#?$/) {
-                Warn(qq(Invalid TAG name: "$_"\n));
-            }
+            Warn(qq(Invalid TAG name: "$_"\n)) unless /^([-_0-9A-Z*]+:)*([-_0-9A-Z*?]+)#?$/i;
             push @$lst, $_; # (push everything for backward compatibility)
         }
     }
@@ -1438,7 +1441,7 @@ for (;;) {
         push @nextPass, $_;
         next;
     }
-    if ($doGlob and /[*?]/) {
+    if ($doGlob and HasWildcards($_)) {
         if ($^O eq 'MSWin32' and eval { require Win32::FindFile }) {
             push @files, FindFileWindows($mt, $_);
         } else {
@@ -1519,6 +1522,7 @@ if (($tagOut or defined $diff) and ($csv or $json or %printFmt or $tabFormat or 
 }
 
 if ($csv and $csv eq 'CSV' and not $isWriting) {
+    undef $json;    # (not compatible)
     if ($textOut) {
         Warn "Sorry, -w may not be combined with -csv\n";
         $rtnVal = 1;
@@ -1754,9 +1758,11 @@ if (@newValues) {
         $wrn and Warning($mt, $wrn);
     }
     # exclude specified tags
-    foreach (@exclude) {
-        $mt->SetNewValue($_, undef, Replace => 2);
-        $needSave = 1;
+    unless ($csv) {
+        foreach (@exclude) {
+            $mt->SetNewValue($_, undef, Replace => 2);
+            $needSave = 1;
+        }
     }
     unless ($isWriting or $outOpt or @tags) {
         Warn "Nothing to do.\n";
@@ -1772,7 +1778,7 @@ if ($isWriting) {
     if (defined $diff) {
         Error "Can't use -diff option when writing tags\n";
         next;
-    } elsif (@tags and not $outOpt) {
+    } elsif (@tags and not $outOpt and not $csv) {
         my ($tg, $s) = @tags > 1 ? ("$tags[0] ...", 's') : ($tags[0], '');
         Warn "Ignored superfluous tag name$s or invalid option$s: -$tg\n";
     }
@@ -1799,7 +1805,7 @@ if ($binaryOutput) {
 }
 
 # sort by groups to look nicer depending on options
-if (defined $showGroup and not (@tags and $allGroup) and ($sortOpt or not defined $sortOpt)) {
+if (defined $showGroup and not (@tags and ($allGroup or $csv)) and ($sortOpt or not defined $sortOpt)) {
     $mt->Options(Sort => "Group$showGroup");
 }
 
@@ -1837,7 +1843,7 @@ $altEnc = $mt->Options('Charset');
 undef $altEnc if $altEnc eq 'UTF8';
 
 # set flag to fix description lengths if necessary
-if (not $altEnc and $mt->Options('Lang') ne 'en' and eval { require Encode }) {
+if (not $altEnc and $mt->Options('Lang') ne 'en') {
     # (note that Unicode::GCString is part of the Unicode::LineBreak package)
     $fixLen = eval { require Unicode::GCString } ? 2 : 1;
 }
@@ -1909,7 +1915,7 @@ if (@dbKeys) {
                     print $vout "Imported entry for '${_}' (full path: '${absPath}')\n";
                 }
             } elsif ($verbose and $verbose > 1) {
-                print $vout "Imported entry for '${_}' (non-existent file)\n";
+                print $vout "Imported entry for '${_}' (no full path)\n";
             }
         }
     }
@@ -2163,7 +2169,11 @@ sub GetImageInfo($$)
         }
         # can't make use of $info if verbose because we must reprocess
         # the file anyway to generate the verbose output
-        undef $info if $verbose or defined $fastCondition or defined $diff;
+        # (also if writing just to avoid double-incrementing FileSequence)
+        if ($isWriting or $verbose or defined $fastCondition or defined $diff) {
+            undef $info;
+            --$$et{FILE_SEQUENCE};
+        }
     } elsif ($file =~ s/^(\@JSON:)(.*)/$1/) {
         # read JSON file from command line
         my $dat = $2;
@@ -2283,6 +2293,10 @@ sub GetImageInfo($$)
                 $et->Options(Duplicates => 1, Sort => "Group$showGroup", Verbose => 0);
                 $et2 = Image::ExifTool->new;
                 $et2->Options(%{$$et{OPTIONS}});
+                # must set list options specifically because they may have been
+                # set incorrectly from deprecated List settings
+                $et2->Options(ListSep => $$et{OPTIONS}{ListSep});
+                $et2->Options(ListSplit => $$et{OPTIONS}{ListSplit});
                 @found2 = @foundTags;
                 $info2 = $et2->ImageInfo($file2, \@found2);
             } else {
@@ -2339,14 +2353,15 @@ sub GetImageInfo($$)
 
     # print differences if requested
     if (defined $diff) {
-        my (%done2, $wasDiff, @diffs, @groupTags2);
+        my (%done, %done2, $wasDiff, @diffs, @groupTags2);
         my $v = $verbose || 0;
         print $fp "======== diff < $file > $file2\n";
         my ($g2, $same) = (0, 0); # start with $g2 false, but not equal to '' to avoid infinite loop
         for (;;) {
+            my ($g, $tag2, $i, $key, @dupl, $val2, $t2, $equal, %used);
             my $tag = shift @foundTags;
-            my ($g, $tag2);
             if (defined $tag) {
+                $done{$tag} = 1;
                 $g = $et->GetGroup($tag, $showGroup);
             } else {
                 for (;;) {
@@ -2356,7 +2371,6 @@ sub GetImageInfo($$)
                 }
             }
             if ($g ne $g2) {
-                my $t2;
                 # add any outstanding tags from diff file not yet handled in previous group ($g2)
                 foreach $t2 (@groupTags2) {
                     next if $done2{$t2};
@@ -2387,6 +2401,7 @@ sub GetImageInfo($$)
                 ($g2, $same) = ($g, 0);
                 # build list of all tags in the new group of the diff file
                 @groupTags2 = ();
+                push @groupTags2, $tag2 if defined $tag2;
                 foreach $t2 (@found2) {
                     $done2{$t2} or $g ne $et2->GetGroup($t2, $showGroup) or push @groupTags2, $t2;
                 }
@@ -2395,33 +2410,50 @@ sub GetImageInfo($$)
             my $val = $et->GetValue($tag);
             next unless defined $val;  # (just in case)
             my $name = GetTagName($tag);
-            # get matching tag key from diff file
+            my $desc = $outFormat < 1 ? $et->GetDescription($tag) : $name;
+            # get matching tag key(s) from diff file
             my @tags2 = grep /^$name( |$)/, @groupTags2;
-            $name = $et->GetDescription($tag) if $outFormat < 1;
-            my ($val2, $t2);
-            foreach $t2 (@tags2) {
+T2:         foreach $t2 (@tags2) {
                 next if $done2{$t2};
                 $tag2 = $t2;
                 $val2 = $et2->GetValue($t2);
+                next unless defined $val2;
+                IsEqual($val, $val2) and $equal = 1, last;
+                # look ahead for upcoming duplicate tags in this group to see
+                # if any would later match this value (and skip those for now)
+                if ($$et{DUPL_TAG}{$name} and not @dupl) {
+                    for ($i=0, $key=$name; $i<=$$et{DUPL_TAG}{$name}; ++$i, $key="$name ($i)") {
+                        push @dupl, $key unless $done{$key} or $g ne $et->GetGroup($key, $showGroup);
+                    }
+                    @dupl = sort { $$et{FILE_ORDER}{$a} <=> $$et{FILE_ORDER}{$b} } @dupl if @dupl > 1;
+                }
+                foreach (@dupl) {
+                    next if $used{$_};
+                    my $v = $et->GetValue($_);
+                    next unless defined($v) and IsEqual($v, $val2);
+                    $used{$_} = 1;  # would match this upcoming tag
+                    undef($tag2); undef($val2);
+                    next T2;
+                }
                 last;
             }
-            if (defined $val2 and IsEqual($val, $val2)) {
+            if ($equal) {
                 ++$same;
             } else {
-                my $len = LengthUTF8($name);
+                my $len = LengthUTF8($desc);
                 my $pad = $outFormat < 2 ? ' ' x ($len < 32 ? 32 - $len : 0) : '';
                 if ($allGroup) {
                     my $grp = "[$g]";
                     $grp .= ' ' x (15 - length($grp)) if length($grp) < 15 and $outFormat < 2;
-                    push @diffs, sprintf "< %s %s%s: %s\n", $grp, $name, $pad, Printable($val);
+                    push @diffs, sprintf "< %s %s%s: %s\n", $grp, $desc, $pad, Printable($val);
                     if (defined $val2) {
-                        $grp = ' ' x length($grp), $name = ' ' x $len if $v < 3;
-                        push @diffs, sprintf "> %s %s%s: %s\n", $grp, $name, $pad, Printable($val2);
+                        $grp = ' ' x length($grp), $desc = ' ' x $len if $v < 3;
+                        push @diffs, sprintf "> %s %s%s: %s\n", $grp, $desc, $pad, Printable($val2);
                     }
                 } else {
-                    push @diffs, sprintf "< %s%s: %s\n", $name, $pad, Printable($val);
-                    $name = ' ' x $len if $v < 3;
-                    push @diffs, sprintf "> %s%s  %s\n", $name, $pad, Printable($val2) if defined $val2;
+                    push @diffs, sprintf "< %s%s: %s\n", $desc, $pad, Printable($val);
+                    $desc = ' ' x $len if $v < 3;
+                    push @diffs, sprintf "> %s%s: %s\n", $desc, $pad, Printable($val2) if defined $val2;
                 }
             }
             $done2{$tag2} = 1 if defined $tag2;
@@ -2618,7 +2650,13 @@ TAG:    foreach $tag (@foundTags) {
                 # (note that the tag key may look like "TAG #(1)" when the "#" feature is used)
                 next if $noDups and $tag =~ /^(.*?) ?\(/ and defined $$info{$1} and
                         $group eq $et->GetGroup($1, $showGroup);
-                $group = 'Unknown' if not $group and ($xml or $json or $csv);
+                if (not $group and ($xml or $json or $csv)) {
+                    if ($showGroup !~ /\b4\b/) {
+                        $group = 'Unknown';
+                    } elsif ($json and not $allGroup) {
+                        $group = 'Copy0';
+                    }
+                }
                 if ($fp and not ($allGroup or $csv)) {
                     if ($lastGroup ne $group) {
                         if ($html) {
@@ -2839,6 +2877,17 @@ TAG:    foreach $tag (@foundTags) {
                         if ($printConv) {
                             my $num = $et->GetValue($tag, 'ValueConv');
                             $$val{num} = $num if defined $num and not IsEqual($num, $$val{val});
+                        }
+                        my $ex = $$et{TAG_EXTRA}{$tag};
+                        $$val{'fmt'} = $$ex{G6} if defined $$ex{G6};
+                        if (defined $$ex{BinVal}) {
+                            my $max = ($$et{OPTIONS}{LimitLongValues} - 5) / 3;
+                            if ($max >= 0 and length($$ex{BinVal}) > int($max)) {
+                                $max = int $max;
+                                $$val{'hex'} = join ' ', unpack("(H2)$max", $$ex{BinVal}), '[...]';
+                            } else {
+                                $$val{'hex'} = join ' ', unpack '(H2)*', $$ex{BinVal};
+                            }
                         }
                     }
                 }
@@ -3117,7 +3166,7 @@ sub SetImageInfo($$$)
                 next;
             } elsif (ref $dyFile eq 'SCALAR') {
                 # set new values from CSV or JSON database
-                my ($f, $found, $tag);
+                my ($f, $found, $csvTag, $tryTag, $tg);
                 undef $evalWarning;
                 local $SIG{'__WARN__'} = sub { $evalWarning = $_[0] };
                 # force UTF-8 if the database was JSON
@@ -3134,10 +3183,44 @@ sub SetImageInfo($$$)
                         next unless defined $absPath and $csvInfo = $database{$absPath};
                     }
                     $found = 1;
-                    $verbose and print $vout "Setting new values from $csv database\n";
-                    foreach $tag (OrderedKeys($csvInfo)) {
-                        next if $tag =~ /\b(SourceFile|Directory|FileName)$/i; # don't write these
-                        my ($rtn, $wrn) = $et->SetNewValue($tag, $$csvInfo{$tag},
+                    if ($verbose) {
+                        print $vout "Setting new values from $csv database\n";
+                        print $vout 'Including tags: ',join(' ',@tags),"\n" if @tags;
+                        print $vout 'Excluding tags: ',join(' ',@exclude),"\n" if @exclude;
+                    }
+                    my @tryTags = (@exclude, @tags); # (exclude first because it takes priority)
+                    foreach (@tryTags) {
+                        tr/-0-9a-zA-Z_:#?*//dc;     # remove illegal characters
+                        s/(^|:)(all:)+/$1/ig;       # remove 'all' group names
+                        s/(^|:)all(#?)$/$1*$2/i;    # convert 'all' tag name to '*'
+                        tr/?/./;  s/\*/.*/g;        # convert wildcards for regex
+                    }
+                    foreach $csvTag (OrderedKeys($csvInfo)) {
+                        # don't write SourceFile, Directory or FileName
+                        next if $csvTag =~ /^([-_0-9A-Z]+:)*(SourceFile|Directory|FileName)$/i;
+                        if (@tryTags) {
+                            my ($i, $tryGrp, $matched);
+TryMatch:                   for ($i=0; $i<@tryTags; ++$i) {
+                                $tryTag = $tryTags[$i];
+                                if ($tryTag =~ /:/) {
+                                    next unless $csvTag =~ /:/;     # db entry must also specify group
+                                    my @csvGrps = split /:/, $csvTag;
+                                    my @tryGrps = split /:/, $tryTag;
+                                    my $tryName = pop @tryGrps;
+                                    next unless pop(@csvGrps) =~ /^$tryName$/i; # tag name must match
+                                    foreach $tryGrp (@tryGrps) {
+                                        # each specified group name must match db entry
+                                        next TryMatch unless grep /^$tryGrp$/i, @csvGrps;
+                                    }
+                                    $matched = 1;
+                                    last;
+                                }
+                                # no group specified, so match by tag name only
+                                $csvTag =~ /^([-_0-9A-Z]+:)*$tryTag$/i and $matched = 1, last;
+                            }
+                            next if $matched ? $i < @exclude : @tags;
+                        }
+                        my ($rtn, $wrn) = $et->SetNewValue($csvTag, $$csvInfo{$csvTag},
                                           Protected => 1, AddValue => $csvAdd,
                                           ProtectSaved => $csvSaveCount);
                         $wrn and Warn "$wrn\n" if $verbose;
@@ -3604,7 +3687,7 @@ sub EscapeJSON($;$)
     if ($json < 2) { # JSON
         $str =~ tr/\0//d;   # remove all nulls
         # escape other control characters with \u
-        $str =~ s/([\0-\x1f])/sprintf("\\u%.4X",ord $1)/sge;
+        $str =~ s/([\0-\x1f\x7f])/sprintf("\\u%.4X",ord $1)/sge;
         # JSON strings must be valid UTF8
         Image::ExifTool::XMP::FixUTF8(\$str) unless $altEnc;
     } else { # PHP
@@ -3612,7 +3695,7 @@ sub EscapeJSON($;$)
         # must escape "$" too for PHP
         $str =~ s/\$/\\\$/sg;
         # escape other control characters with \x
-        $str =~ s/([\0-\x1f])/sprintf("\\x%.2X",ord $1)/sge;
+        $str =~ s/([\0-\x1f\x7f])/sprintf("\\x%.2X",ord $1)/sge;
     }
     return '"' . $str . '"';    # return the quoted string
 }
@@ -3835,17 +3918,23 @@ sub Printable($)
 sub LengthUTF8($)
 {
     my $str = shift;
-    my $len;
-    if (not $fixLen) {
-        $len = length $str;
-    } elsif ($fixLen == 1) {
-        $len = length Encode::decode_utf8($str);
+    return length $str unless $fixLen;
+    local $SIG{'__WARN__'} = sub { };
+    if (not $$mt{OPTIONS}{EncodeHangs} and eval { require Encode }) {
+        $str = Encode::decode_utf8($str);
     } else {
-        my $gcstr = eval { Unicode::GCString->new(Encode::decode_utf8($str)) };
+        $str = pack('U0C*', unpack 'C*', $str);
+    }
+    my $len;
+    if ($fixLen == 1) {
+        $len = length $str;
+    } else {
+        my $gcstr = eval { Unicode::GCString->new($str) };
         if ($gcstr) {
             $len = $gcstr->columns;
         } else {
-            $len = length Encode::decode_utf8($str);
+            $len = length $str;
+            delete $SIG{'__WARN__'};
             Warning($mt, 'Unicode::GCString problem.  Columns may be misaligned');
             $fixLen = 1;
         }
@@ -3946,6 +4035,19 @@ sub DoSetFromFile($$$)
 sub CleanFilename($)
 {
     $_[0] =~ tr/\\/\// if Image::ExifTool::IsPC();
+}
+
+#------------------------------------------------------------------------------
+# Does path name contain wildcards
+# Inputs: 0) path name
+# Returns: true if path contains wildcards
+sub HasWildcards($)
+{
+    my $path = shift;
+
+    # if this is a Windows path with the long path prefix, then wildcards are not supported
+    return 0 if $^O eq 'MSWin32' and $path =~ m{^[\\/]{2}\?[\\/]};
+    return $path =~ /[*?]/;
 }
 
 #------------------------------------------------------------------------------
@@ -4068,7 +4170,7 @@ sub ScanDir($$;$)
     return if $ignore{$dir};
     # use Win32::FindFile on Windows if available
     # (ReadDir will croak if there is a wildcard, so check for this)
-    if ($^O eq 'MSWin32' and $dir !~ /[*?]/) {
+    if ($^O eq 'MSWin32' and not HasWildcards($dir)) {
         undef $evalWarning;
         local $SIG{'__WARN__'} = sub { $evalWarning = $_[0] };;
         if (CheckUTF8($dir, $enc) >= 0) {
@@ -4112,11 +4214,12 @@ sub ScanDir($$;$)
     }
     $dir =~ /\/$/ or $dir .= '/';   # make sure directory name ends with '/'
     foreach $file (@fileList) {
+        next if $file eq '.' or $file eq '..';
         my $path = "$dir$file";
         if ($et->IsDirectory($path)) {
             next unless $recurse;
             # ignore directories starting with "." by default
-            next if $file =~ /^\./ and ($recurse == 1 or $file eq '.' or $file eq '..');
+            next if $file =~ /^\./ and $recurse == 1;
             next if $ignore{$file} or ($ignore{SYMLINKS} and -l $path);
             ScanDir($et, $path, $list);
             last if $end;
@@ -4194,7 +4297,7 @@ sub FindFileWindows($$)
     $wildfile = $et->Decode($wildfile, $enc, undef, 'UTF8') if $enc and $enc ne 'UTF8';
     $wildfile =~ tr/\\/\//; # use forward slashes
     my ($dir, $wildname) = ($wildfile =~ m{(.*[:/])(.*)}) ? ($1, $2) : ('', $wildfile);
-    if ($dir =~ /[*?]/) {
+    if (HasWildcards($dir)) {
         Warn "Wildcards don't work in the directory specification\n";
         return ();
     }
@@ -4264,14 +4367,15 @@ sub AbsPath($)
 {
     my $file = shift;
     my $path;
-    if (defined $file and eval { require Cwd }) {
-        $path = eval { Cwd::abs_path($file) };
-        # make the delimiters and case consistent
-        # (abs_path is very inconsistent about what it returns in Windows)
-        if (defined $path and Image::ExifTool::IsPC()) {
-            $path =~ tr/\\/\//;
-            $path = lc $path;
+    if (defined $file) {
+        return undef if $file eq '*';   # (CSV SourceFile may be '*' -- no absolute path for that)
+        if ($^O eq 'MSWin32' and $mt->Options('WindowsLongPath')) {
+            $path = $mt->WindowsLongPath($file);
+        } elsif (eval { require Cwd }) {
+            local $SIG{'__WARN__'} = sub { };
+            $path = eval { Cwd::abs_path($file) };
         }
+        $path =~ tr/\\/\// if $^O eq 'MSWin32' and defined $path;   # use forward slashes
     }
     return $path;
 }
@@ -4306,7 +4410,7 @@ sub AddPrintFormat($)
     $printFmt{$type} or $printFmt{$type} = [ ];
     push @{$printFmt{$type}}, $expr;
     # add to list of requested tags
-    push @requestTags, $expr =~ /\$\{?((?:[-\w]+:)*[-\w?*]+)/g;
+    push @requestTags, $expr =~ /\$\{?((?:[-_0-9A-Z]+:)*[-_0-9A-Z?*]+)/ig;
     $printFmt{SetTags} = 1 if $expr =~ /\bSetTags\b/;
 }
 
@@ -4661,7 +4765,7 @@ sub FilterArgfileLine($)
         $arg =~ s/^\s+//;           # remove leading white space
         $arg =~ s/[\x0d\x0a]+$//s;  # remove trailing newline
         # remove white space before, and single space after '=', '+=', '-=' or '<='
-        $arg =~ s/^(-[-:\w]+#?)\s*([-+<]?=) ?/$1$2/;
+        $arg =~ s/^(-[-_0-9A-Z:]+#?)\s*([-+<]?=) ?/$1$2/i;
         return undef if $arg eq '';
     }
     return $arg;

@@ -112,7 +112,7 @@ $VERSION = '1.26';
         113 => 'Power Zoom +',
         114 => 'Power Zoom -',
         115 => 'Delete',
-        116 => 'Pixel Shift Shooting',
+        116 => 'Pixel Shift Shooting', #Z8 (Z9 fw 5.1 maps as 'Save and Load Power Zoom Position')
         117 => 'Cycle AF-area Mode',
         118 => 'Raw Processing (Current)',  #118-131 are Playback Retouch options
         119 => 'Raw Processing (Multiple)',
@@ -11362,7 +11362,7 @@ this information.
 
 =head1 AUTHOR
 
-Copyright 2003-2024, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

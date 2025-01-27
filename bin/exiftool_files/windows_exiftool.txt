@@ -734,6 +734,13 @@ OPTIONS
          API option was used). Multiple databases may be imported in a
          single command.
 
+         Specific tags may be imported from the CSV database by adding
+         -*TAG* options to the command, or excluded with --*TAG*, with
+         exclusions taking priority. Group names and wildcards are allowed.
+         If no tags are specified, then all except FileName and Directory
+         are used. Tags are imported in the same order as the database
+         entries.
+
          When exporting a CSV file, the -g or -G option adds group names to
          the tag headings. If the -a option is used to allow duplicate tag
          names, the duplicate tags are only included in the CSV output if
@@ -779,18 +786,30 @@ OPTIONS
     -d *FMT* (-dateFormat)
          Set the format for date/time tag values. The *FMT* string may
          contain formatting codes beginning with a percent character ("%")
-         to represent the various components of a date/time value. The
-         specifics of the *FMT* syntax are system dependent -- consult the
-         "strftime" man page on your system for details. The default format
-         is equivalent to "%Y:%m:%d %H:%M:%S". This option has no effect on
-         date-only or time-only tags and ignores timezone information if
-         present. ExifTool adds a %f format code to represent fractional
-         seconds, and supports an optional width to specify the number of
-         digits after the decimal point (eg. %3f would give something like
-         .437), and a minus sign to drop the decimal point (eg. "%-3f" would
-         give 437). Only one -d option may be used per command. Requires
-         POSIX::strptime or Time::Piece for the inversion conversion when
-         writing.
+         to represent the various components of a date/time value. ExifTool
+         implements 3 format codes internally (see below), but other format
+         codes are system dependent -- consult the "strftime" man page on
+         your system for details. The default format is equivalent to
+         "%Y:%m:%d %H:%M:%S". This option has no effect on date-only or
+         time-only tags. Requires POSIX::strptime or Time::Piece for the
+         inversion conversion when writing. Only one -d option may be used
+         per command.
+
+         Additional format codes implemented internally by ExifTool:
+
+         1) %z represents the time zone in "+/-HHMM" format. Adding a colon
+         (ie. %:z) adds a colon separator (eg. "-05:00"). If the date/time
+         value doesn't contain a time zone then %z gives the system time
+         zone for the specified date/time value.
+
+         2) %f represents fractional seconds, and supports an optional width
+         to specify the number of digits after the decimal point (eg. %3f
+         would give something like ".437"). Adding a minus sign drops the
+         decimal point (eg. "%-3f" would give "437").
+
+         3) %s represents the number of seconds since 00:00 UTC Jan 1, 1970,
+         taking into account the specified time zone (or system time zone if
+         not specified).
 
     -D (-decimal)
          Show tag ID number in decimal when extracting information.
@@ -869,18 +888,29 @@ OPTIONS
          as simple strings). The -a option is implied when -json is used,
          but entries with identical JSON names are suppressed in the output.
          (-G4 may be used to ensure that all tags have unique JSON names.)
+
          Adding the -D or -H option changes tag values to JSON objects with
-         "val" and "id" fields, and adding -l adds a "desc" field, and a
-         "num" field if the numerical value is different from the converted
-         "val". The -b option may be added to output binary data, encoded in
-         base64 if necessary (indicated by ASCII "base64:" as the first 7
-         bytes of the value), and -t may be added to include tag table
-         information (see -t for details). The JSON output is UTF-8
-         regardless of any -L or -charset option setting, but the UTF-8
-         validation is disabled if a character set other than UTF-8 is
-         specified. Note that ExifTool quotes JSON values only if they don't
-         look like numbers (regardless of the original storage format or the
-         relevant metadata specification).
+         "val" and "id" fields. Adding -l adds a "desc" field, and a "num"
+         field if the numerical value is different from the converted "val",
+         and "fmt" and "hex" fields for EXIF metadata if the API SaveFormat
+         and SaveBin options are set respectively, and the length of the
+         "hex" output is limited by the API LimitLongValues setting. The -b
+         option may be added to output binary data, encoded in base64 if
+         necessary (indicated by ASCII "base64:" as the first 7 bytes of the
+         value), and -t may be added to include tag table information (see
+         -t for details). The JSON output is UTF-8 regardless of any -L or
+         -charset option setting, but the UTF-8 validation is disabled if a
+         character set other than UTF-8 is specified.
+
+         Note that ExifTool quotes JSON values only if they don't look like
+         numbers (regardless of the original storage format or the relevant
+         metadata specification). This may be a problem when reading the
+         JSON via a strongly typed language. However, the API StructFormat
+         option may be set to "JSONQ" to force quoting of numbers. As well,
+         the -sep option may be used to convert arrays into strings. For
+         example:
+
+             exiftool -j -api structformat=jsonq -sep ", " ...
 
          If *JSONFILE* is specified, the file is imported and the tag
          definitions from the file are used to set tag values on a per-file
@@ -895,6 +925,13 @@ OPTIONS
          with -D, -H, -l, or -T is not compatible, and use -G instead of
          -g). Additionally, tag names in the input JSON file may be suffixed
          with a "#" to disable print conversion.
+
+         Specific tags may be imported from the JSON database by adding
+         -*TAG* options to the command, or excluded with --*TAG*, with
+         exclusions taking priority. Group names and wildcards are allowed.
+         If no tags are specified, then all except FileName and Directory
+         are used. Tags are imported in the same order as the database
+         entries.
 
          Unlike CSV import, empty values are not ignored, and will cause an
          empty value to be written if supported by the specific metadata
@@ -1039,7 +1076,7 @@ OPTIONS
 
          produces output like this:
 
-             -- Generated by ExifTool 13.00 --
+             -- Generated by ExifTool 13.16 --
              File: a.jpg - 2003:10:31 15:44:19
              (f/5.6, 1/60s, ISO 100)
              File: b.jpg - 2006:05:23 11:57:38
@@ -1056,8 +1093,9 @@ OPTIONS
          (unless the "All" group is also specified, in which case the values
          of all matching tags are joined).
 
-         When -ee (-extractEmbedded) is combined with -p, embedded documents
-         are effectively processed as separate input files.
+         The -p output iterates through the family 3 group names, with each
+         sub-document producing additional output when combined with the -ee
+         (ExtractEmbedded) option.
 
          If a specified tag does not exist, a minor warning is issued and
          the line with the missing tag is not printed. However, the -f
@@ -1151,7 +1189,8 @@ OPTIONS
          tab-delimited on a single line. The -t option may be combined with
          -j, -php or -X to add tag table information ("table", tag "id", and
          "index" for cases where multiple conditional tags exist with the
-         same ID).
+         same ID), which allows the corresponding tag to be located in the
+         -listx output.
 
     -T (-table)
          Output tag values in table form. Equivalent to -t -S -q -f.
@@ -1471,17 +1510,18 @@ OPTIONS
          images or the audio/video data in WAV/AVI files to search for
          additional metadata. These speed benefits are small when reading
          images directly from disk, but can be substantial if piping images
-         through a network connection. For more substantial speed benefits,
-         -fast2 also causes exiftool to avoid extracting any EXIF MakerNote
-         information, and to stop processing at the IDAT chunk of PNG images
-         and the mdat atom of QuickTime-format files (but note that some
-         files may store metadata after this). -fast3 avoids extracting
-         metadata from the file, and returns only pseudo System tags, but
-         still reads the file header to obtain an educated guess at
-         FileType. -fast4 doesn't even read the file header, and returns
-         only System tags and a FileType based on the file extension. -fast5
-         also disables generation of the Composite tags (like -e). Has no
-         effect when writing.
+         through a network connection. Also bypasses CRC validation when
+         writing PNG images which can be very slow. For more substantial
+         speed benefits, -fast2 also causes exiftool to avoid extracting any
+         EXIF MakerNote information, and to stop processing at the IDAT
+         chunk of PNG images and the mdat atom of QuickTime-format files
+         (but note that some files may store metadata after this). -fast3
+         avoids extracting metadata from the file, and returns only pseudo
+         System tags, but still reads the file header to obtain an educated
+         guess at FileType. -fast4 doesn't even read the file header, and
+         returns only System tags and a FileType based on the file
+         extension. -fast5 also disables generation of the Composite tags
+         (like -e). Has no effect when writing.
 
          Note that a separate -fast setting may be used for evaluation of a
          -if condition, or when ordering files with the -fileOrder option.
@@ -1882,9 +1922,10 @@ OPTIONS
          The -g and -G options may be used to organize the output by the
          specified family of groups, with -G1 being the default. The -a
          option is implied. Adding -v includes a count of the number of tags
-         that are the same in each group. The following text formatting
-         options are valid when -diff is used: -c, -charset, -d, -E, -ec,
-         -ex, -L, -lang, -n, -s, -sep, -struct and -w.
+         that are the same in each group, and -v2 also indicates when zero
+         tags were the same. The following text formatting options are valid
+         when -diff is used: -c, -charset, -d, -E, -ec, -ex, -L, -lang, -n,
+         -s, -sep, -struct and -w.
 
     -geotag *TRKFILE*
          Geotag images from the specified GPS track log file. Using the
@@ -1899,14 +1940,14 @@ OPTIONS
              exiftool -geotag trk.log image.jpg
              exiftool -geotag trk.log "-Geotime<DateTimeOriginal#" image.jpg
 
-         When the "Geotime" value is converted to UTC, the local system
-         timezone is assumed unless the date/time value contains a timezone.
-         Writing "Geotime" causes the following tags to be written (provided
-         they can be calculated from the track log, and they are supported
-         by the destination metadata format): GPSLatitude, GPSLatitudeRef,
-         GPSLongitude, GPSLongitudeRef, GPSAltitude, GPSAltitudeRef,
-         GPSDateStamp, GPSTimeStamp, GPSDateTime, GPSTrack, GPSTrackRef,
-         GPSSpeed, GPSSpeedRef, GPSImgDirection, GPSImgDirectionRef,
+         If the "Geotime" value does not contain a time zone then the local
+         system timezone is assumed. Writing "Geotime" causes the following
+         tags to be written (provided they can be calculated from the track
+         log, and they are supported by the destination metadata format):
+         GPSLatitude, GPSLatitudeRef, GPSLongitude, GPSLongitudeRef,
+         GPSAltitude, GPSAltitudeRef, GPSDateStamp, GPSTimeStamp,
+         GPSDateTime, GPSTrack, GPSTrackRef, GPSSpeed, GPSSpeedRef,
+         GPSImgDirection, GPSImgDirectionRef, GPSMeasureMode, GPSDOP,
          GPSPitch, GPSRoll, GPSCoordinates, AmbientTemperature and
          CameraElevationAngle. By default, in image files tags are created
          in EXIF, and updated in XMP only if they already exist. In
@@ -2373,6 +2414,10 @@ WRITING READ-ONLY FILES
         exiftool -if "$fileattributes !~ /Hidden/" ...
 
 READING EXAMPLES
+    The commands below are appropriate for the Windows cmd shell, which is
+    recommended.  If running in PowerShell, single quotes would be needed
+    instead of double quotes around arguments containing a dollar sign.
+
     exiftool -a -u -g1 a.jpg
          Print all meta information in an image, including duplicate and
          unknown tags, sorted by group (for family 1). For performance
@@ -2439,7 +2484,7 @@ READING EXAMPLES
          Print one line of output containing the file name and
          DateTimeOriginal for each image in directory "dir".
 
-    exiftool -ee3 -p '$gpslatitude, $gpslongitude, $gpstimestamp' a.m2ts
+    exiftool -ee3 -p "$gpslatitude, $gpslongitude, $gpstimestamp" a.m2ts
          Extract all GPS positions from an AVCHD video.
 
     exiftool -icc_profile -b -w icc image.jpg
@@ -2847,7 +2892,7 @@ EXIT STATUS
     the commands if -execute was used).
 
 AUTHOR
-    Copyright 2003-2024, Phil Harvey
+    Copyright 2003-2025, Phil Harvey
 
     This is free software; you can redistribute it and/or modify it under
     the same terms as Perl itself.

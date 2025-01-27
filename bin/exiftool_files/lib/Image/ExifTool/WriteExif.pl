@@ -387,8 +387,8 @@ sub ValidateImageData($$$;$)
             }
             push @bitsPerSample, $bitsPerSample[0] while @bitsPerSample < $samplesPerPix;
             foreach (@bitsPerSample) {
-                $et->WarnOnce("$dirName BitsPerSample values are different", $minor) if $_ ne $bitsPerSample[0];
-                $et->WarnOnce("Invalid $dirName BitsPerSample value", $minor) if $_ < 1 or $_ > 32;
+                $et->Warn("$dirName BitsPerSample values are different", $minor) if $_ ne $bitsPerSample[0];
+                $et->Warn("Invalid $dirName BitsPerSample value", $minor) if $_ < 1 or $_ > 32;
             }
         }
         my $bitsPerPixel = 0;
@@ -2725,7 +2725,7 @@ This file contains routines to write EXIF metadata.
 
 =head1 AUTHOR
 
-Copyright 2003-2024, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

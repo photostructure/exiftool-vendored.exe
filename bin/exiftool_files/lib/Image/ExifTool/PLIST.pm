@@ -21,7 +21,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::XMP;
 use Image::ExifTool::GPS;
 
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 sub ExtractObject($$;$);
 sub Get24u($$);
@@ -269,7 +269,7 @@ sub ExtractObject($$;$)
             if ($type == 13) { # dict
                 # prevent infinite recursion
                 if (defined $parent and length $parent > 1000) {
-                    $et->WarnOnce('Possible deep recursion while parsing PLIST');
+                    $et->Warn('Possible deep recursion while parsing PLIST');
                     return undef;
                 }
                 my $tagTablePtr = $$plistInfo{TagTablePtr};
@@ -344,7 +344,7 @@ sub ProcessBinaryPLIST($$;$)
     my ($i, $buff, @table);
     my $dataPt = $$dirInfo{DataPt};
 
-    $et->VerboseDir('Binary PLIST');
+    $et->VerboseDir('Binary PLIST') unless $$dirInfo{NoVerboseDir};
     SetByteOrder('MM');
 
     if ($dataPt) {
@@ -450,7 +450,7 @@ This module decodes both the binary and XML-based PLIST format.
 
 =head1 AUTHOR
 
-Copyright 2003-2024, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
