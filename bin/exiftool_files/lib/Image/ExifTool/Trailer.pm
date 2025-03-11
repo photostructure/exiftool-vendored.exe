@@ -12,7 +12,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.00';
+$VERSION = '1.01';
 
 %Image::ExifTool::Trailer::Vivo = (
     GROUPS => { 0 => 'Trailer', 1 => 'Vivo', 2 => 'Image' },
@@ -214,7 +214,7 @@ sub ProcessGoogle($$)
 
     delete $$et{ProcessGoogleTrailer};  # reset flag to process the Google trailer
 
-    return -1 if $$dirInfo{OutFile};
+    return -1 if $$dirInfo{OutFile};    # let caller handle the writing
 
     # sometimes DirectoryItemLength is missing the Primary entry
     $len = [ $len ] unless ref $len eq 'ARRAY';
@@ -271,7 +271,7 @@ sub ProcessGoogle($$)
             DataPos => $start + $pos,
             DirLen  => $$len[$i],
         });
-        $et->HandleTag($tagTable, $$tag[$i], \$buff, { DataPos => $start + $pos, DataPt => \$buff });
+        $et->HandleTag($tagTable, $$tag[$i], \$buff, DataPos => $start + $pos, DataPt => \$buff);
         # (haven't seen non-zero padding, but I assume this is how it works
         $pos += $$len[$i] + (($pad and $$pad[$i]) ? $$pad[$i] : 0);
     }

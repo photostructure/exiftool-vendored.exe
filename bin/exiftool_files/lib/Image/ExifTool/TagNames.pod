@@ -12,7 +12,7 @@ meta information extracted from or written to a file.
 =head1 TAG TABLES
 
 The tables listed below give the names of all tags recognized by ExifTool.
-They contain a total of 28402 tags, with 17530 unique tag names.
+They contain a total of 28422 tags, with 17656 unique tag names.
 
 B<Tag ID>, B<Index#> or B<Sequence> is given in the first column of each
 table.  A B<Tag ID> is the computer-readable equivalent of a tag name, and
@@ -125,6 +125,7 @@ L<https://www.w3.org/Graphics/JPEG/jfif3.pdf> for the JPEG specification.
                PreviewImage                     no
   'APP4'       Scalado                          Scalado
                FPXR                             FlashPix
+               QualcommDualCamera               Qualcomm DualCamera
                InfiRayFactory                   InfiRay Factory
                ThermalParams                    DJI ThermalParams
                ThermalParams2                   DJI ThermalParams2
@@ -5566,6 +5567,8 @@ is to write ImageRegion as a structure with these tags as new fields.
 
 =head3 XMP LocationDetails Struct
 
+Note that the GPS elements of this structure are in the "exif" namespace.
+
   Field Name                                    Writable
   ----------                                    --------
   City                                          string
@@ -5750,14 +5753,14 @@ These tags belong to the ExifTool XMP-pdf family 1 group.
 =head3 XMP pdfx Tags
 
 PDF extension tags.  This namespace is used to store application-defined PDF
-information, so there are no pre-defined tags.  User-defined tags must be
-created to enable writing of XMP-pdfx information.
+information, so there are few pre-defined tags.  User-defined tags must be
+created to enable writing of other XMP-pdfx information.
 
 These tags belong to the ExifTool XMP-pdfx family 1 group.
 
   Tag Name                                      Writable
   --------                                      --------
-  [no tags known]
+  SourceModified                                string
 
 =head3 XMP photoshop Tags
 
@@ -7829,6 +7832,8 @@ Tags extracted from the maker notes of iPhone images.
   0x0042   SemanticStylePreset                  no
   0x004e   Apple_0x004e?                        no
   0x004f   Apple_0x004f?                        no
+  0x0054   Apple_0x0054?                        no
+  0x005a   Apple_0x005a?                        no
 
 =head3 Apple RunTime Tags
 
@@ -11517,65 +11522,142 @@ unknown dbgi debug tags.  Tag ID's are composed of the corresponding .proto
 file name combined with the hierarchical protobuf field numbers.
 
 ExifTool currently extracts timed GPS plus a few other tags from DJI devices
-which use the following protocols:  dvtm_AVATA2.proto (Avanta 2),
-dvtm_ac203.proto (Osmo Action 4), dvtm_ac204.proto (Osmo Action 5) and
-dvtm_wm265e.proto (Mavic 3).
+which use the following protocols:  dvtm_AVATA2.proto (Avata 2),
+dvtm_ac203.proto (Osmo Action 4), dvtm_ac204.proto (Osmo Action 5),
+dvtm_wm265e.proto (Mavic 3), dvtm_pm320.proto (Matrice 30) and
+dvtm_pm320.proto (Mini 4 Pro).
 
 Note that with the protobuf format, numerical tags missing from the output
 for a given protocol should be considered to have the default value of 0.
 
-  Tag ID                 Tag Name               Writable
-  ------                 --------               --------
-  'Protocol'             Protocol               no
-  'dvtm_AVATA2_1-1-5'    SerialNumber           no
-  'dvtm_AVATA2_1-1-10'   Model                  no
-  'dvtm_AVATA2_2-2-3-1'  SerialNumber2          no
-  'dvtm_AVATA2_2-3'      FrameInfo              DJI FrameInfo
-  'dvtm_AVATA2_3-1-2'    TimeStamp              no
-  'dvtm_AVATA2_3-4-4-1'  GPSInfo                DJI GPSInfo
-  'dvtm_ac203_1-1-5'     SerialNumber           no
-  'dvtm_ac203_1-1-10'    Model                  no
-  'dvtm_ac203_2-3'       FrameInfo              DJI FrameInfo
-  'dvtm_ac203_3-4-2-1'   GPSInfo                DJI GPSInfo
-  'dvtm_ac203_3-4-2-2'   GPSAltitude            no
-  'dvtm_ac203_3-4-2-6-1' GPSDateTime            no
-  'dvtm_ac204_1-1-5'     SerialNumber           no
-  'dvtm_ac204_1-1-10'    Model                  no
-  'dvtm_ac204_2-3'       FrameInfo              DJI FrameInfo
-  'dvtm_ac204_3-4-2-1'   GPSInfo                DJI GPSInfo
-  'dvtm_ac204_3-4-2-2'   GPSAltitude            no
-  'dvtm_ac204_3-4-2-6-1' GPSDateTime            no
-  'dvtm_wm265e_1-1-5'    SerialNumber           no
-  'dvtm_wm265e_1-1-10'   Model                  no
-  'dvtm_wm265e_2-2'      FrameInfo              DJI FrameInfo
-  'dvtm_wm265e_3-2-2-1'  ISO                    no
-  'dvtm_wm265e_3-2-3-1'  ShutterSpeed           no
-  'dvtm_wm265e_3-2-6-1'  DigitalZoom            no
-  'dvtm_wm265e_3-3-3-1'  DroneRoll              no
-  'dvtm_wm265e_3-3-3-2'  DronePitch             no
-  'dvtm_wm265e_3-3-3-3'  DroneYaw               no
-  'dvtm_wm265e_3-3-4-1'  GPSInfo                DJI GPSInfo
-  'dvtm_wm265e_3-3-4-2'  AbsoluteAltitude       no
-  'dvtm_wm265e_3-3-5-1'  RelativeAltitude       no
-  'dvtm_wm265e_3-4-3-1'  GimbalPitch            no
-  'dvtm_wm265e_3-4-3-2'  GimbalRoll             no
-  'dvtm_wm265e_3-4-3-3'  GimbalYaw              no
+  Tag ID                    Tag Name            Writable
+  ------                    --------            --------
+  'Protocol'                Protocol            no
+  'dvtm_AVATA2_1-1-5'       SerialNumber        no
+  'dvtm_AVATA2_1-1-10'      Model               no
+  'dvtm_AVATA2_2-2-3-1'     SerialNumber2       no
+  'dvtm_AVATA2_2-3'         FrameInfo           DJI FrameInfo
+  'dvtm_AVATA2_3-1-2'       TimeStamp           no
+  'dvtm_AVATA2_3-2-2-1'     ISO                 no
+  'dvtm_AVATA2_3-2-4-1'     ShutterSpeed        no
+  'dvtm_AVATA2_3-2-6-1'     ColorTemperature    no
+  'dvtm_AVATA2_3-2-10-1'    FNumber             no
+  'dvtm_AVATA2_3-4-3'       DroneInfo           DJI DroneInfo
+  'dvtm_AVATA2_3-4-4-1'     GPSInfo             DJI GPSInfo
+  'dvtm_AVATA2_3-4-4-2'     AbsoluteAltitude    no
+  'dvtm_AVATA2_3-4-5-1'     RelativeAltitude    no
+  'dvtm_Mini4_Pro_1-1-5'    SerialNumber        no
+  'dvtm_Mini4_Pro_1-1-10'   Model               no
+  'dvtm_Mini4_Pro_2-3'      FrameInfo           DJI FrameInfo
+  'dvtm_Mini4_Pro_3-2-7-1'  ISO                 no
+  'dvtm_Mini4_Pro_3-3-3'    DroneInfo           DJI DroneInfo
+  'dvtm_Mini4_Pro_3-3-4-1'  GPSInfo             DJI GPSInfo
+  'dvtm_Mini4_Pro_3-3-4-2'  AbsoluteAltitude    no
+  'dvtm_Mini4_Pro_3-3-5-1'  RelativeAltitude    no
+  'dvtm_Mini4_Pro_3-4-3'    GimbalInfo          DJI GimbalInfo
+  'dvtm_Mini4_Pro_3-2-10-1' ShutterSpeed        no
+  'dvtm_Mini4_Pro_3-2-11-1' FNumber             no
+  'dvtm_Mini4_Pro_3-2-32-1' ColorTemperature    no
+  'dvtm_ac203_1-1-5'        SerialNumber        no
+  'dvtm_ac203_1-1-10'       Model               no
+  'dvtm_ac203_2-3'          FrameInfo           DJI FrameInfo
+  'dvtm_ac203_3-2-2-1'      ISO                 no
+  'dvtm_ac203_3-2-4-1'      ShutterSpeed        no
+  'dvtm_ac203_3-2-6-1'      ColorTemperature    no
+  'dvtm_ac203_3-2-10-2'     AccelerometerX      no
+  'dvtm_ac203_3-2-10-3'     AccelerometerY      no
+  'dvtm_ac203_3-2-10-4'     AccelerometerZ      no
+  'dvtm_ac203_3-4-2-1'      GPSInfo             DJI GPSInfo
+  'dvtm_ac203_3-4-2-2'      GPSAltitude         no
+  'dvtm_ac203_3-4-2-6-1'    GPSDateTime         no
+  'dvtm_ac204_1-1-5'        SerialNumber        no
+  'dvtm_ac204_1-1-10'       Model               no
+  'dvtm_ac204_2-3'          FrameInfo           DJI FrameInfo
+  'dvtm_ac204_3-2-4-1'      ShutterSpeed        no
+  'dvtm_ac204_3-2-6-1'      ColorTemperature    no
+  'dvtm_ac204_3-2-10-2'     AccelerometerX      no
+  'dvtm_ac204_3-2-10-3'     AccelerometerY      no
+  'dvtm_ac204_3-2-10-4'     AccelerometerZ      no
+  'dvtm_ac204_3-4-2-1'      GPSInfo             DJI GPSInfo
+  'dvtm_ac204_3-4-2-2'      GPSAltitude         no
+  'dvtm_ac204_3-4-2-6-1'    GPSDateTime         no
+  'dvtm_pm320_1-1-5'        SerialNumber        no
+  'dvtm_pm320_1-1-10'       Model               no
+  'dvtm_pm320_2-2'          FrameInfo           DJI FrameInfo
+  'dvtm_pm320_3-2-2-1'      ISO                 no
+  'dvtm_pm320_3-2-3-1'      ShutterSpeed        no
+  'dvtm_pm320_3-2-4-1'      FNumber             no
+  'dvtm_pm320_3-2-6-1'      DigitalZoom         no
+  'dvtm_pm320_3-3-3'        DroneInfo           DJI DroneInfo
+  'dvtm_pm320_3-3-4-1'      GPSInfo             DJI GPSInfo
+  'dvtm_pm320_3-3-4-2'      AbsoluteAltitude    no
+  'dvtm_pm320_3-3-5-1'      RelativeAltitude    no
+  'dvtm_pm320_3-4-3'        GimbalInfo          DJI GimbalInfo
+  'dvtm_wm265e_1-1-5'       SerialNumber        no
+  'dvtm_wm265e_1-1-10'      Model               no
+  'dvtm_wm265e_2-2'         FrameInfo           DJI FrameInfo
+  'dvtm_wm265e_3-2-2-1'     ISO                 no
+  'dvtm_wm265e_3-2-3-1'     ShutterSpeed        no
+  'dvtm_wm265e_3-2-6-1'     DigitalZoom         no
+  'dvtm_wm265e_3-3-3'       DroneInfo           DJI DroneInfo
+  'dvtm_wm265e_3-3-4-1'     GPSInfo             DJI GPSInfo
+  'dvtm_wm265e_3-3-4-2'     AbsoluteAltitude    no
+  'dvtm_wm265e_3-3-5-1'     RelativeAltitude    no
+  'dvtm_wm265e_3-4-3'       GimbalInfo          DJI GimbalInfo
 
 =head3 DJI FrameInfo Tags
 
-  Tag ID   Tag Name                             Writable
-  ------   --------                             --------
+  Field #  Tag Name                             Writable
+  -------  --------                             --------
       1    FrameWidth                           no
       2    FrameHeight                          no
       3    FrameRate                            no
 
+=head3 DJI DroneInfo Tags
+
+  Field #  Tag Name                             Writable
+  -------  --------                             --------
+      1    DroneRoll                            no
+      2    DronePitch                           no
+      3    DroneYaw                             no
+
 =head3 DJI GPSInfo Tags
 
-  Tag ID   Tag Name                             Writable
-  ------   --------                             --------
+  Field #  Tag Name                             Writable
+  -------  --------                             --------
       1    CoordinateUnits                      no
       2    GPSLatitude                          no
       3    GPSLongitude                         no
+
+=head3 DJI GimbalInfo Tags
+
+  Field #  Tag Name                             Writable
+  -------  --------                             --------
+      1    GimbalPitch                          no
+      2    GimbalRoll                           no
+      3    GimbalYaw                            no
+
+=head3 DJI Glamour Tags
+
+Glamour settings used by some DJI models.
+
+  Tag ID               Tag Name                 Writable
+  ------               --------                 --------
+  'acne_spot_removal'  AcneSpotRemoval          no
+  'beauty_enable'      BeautyEnable             no
+  'blush'              Blush                    no
+  'dark_circle'        DarkCircle               no
+  'eye_enlarge'        EyeEnlarge               no
+  'eyebrows'           Eyebrows                 no
+  'face_slimming'      FaceSlimming             no
+  'head_shrinking'     HeadShrinking            no
+  'leg_longer'         LegLonger                no
+  'lipstick'           Lipstick                 no
+  'mouth_beautify'     MouthModify              no
+  'nose_slimming'      NoseSlimming             no
+  'smoother'           Smoother                 no
+  'teeth_whitening'    TeethWhitening           no
+  'whitening'          Whitening                no
 
 =head2 FLIR Tags
 
@@ -12307,24 +12389,40 @@ L<https://github.com/gopro/gpmf-parser> for details about this format.
   Tag ID   Tag Name                             Writable
   ------   --------                             --------
   'AALP'   AudioLevel                           no
+  'ABSC'   AutoBoostScore                       no
   'ACCL'   Accelerometer                        no
   'ALLD'   AutoLowLightDuration                 no
+  'APTO'   AudioProtuneOption                   no
+  'ARUW'   AspectRatioUnwarped                  no
+  'ARWA'   AspectRatioWarped                    no
   'ATTD'   Attitude                             no
   'ATTR'   AttitudeTarget                       no
+  'AUBT'   AudioBlueTooth                       no
   'AUDO'   AudioSetting                         no
+  'AUPT'   AutoProtune                          no
+  'BITR'   BitrateSetting                       no
   'BPOS'   Controller?                          no
   'CASN'   CameraSerialNumber                   no
+  'CDAT'   CreationDate                         no
+  'CDTM'   CaptureDelayTimer                    no
+  'CLDP'   ClassificationDataPresent            no
   'CORI'   CameraOrientation                    no
+  'CPIN'   ChapterNumber                        no
   'CSEN'   CoyoteSense                          no
+  'CTRL'   ControlLevel                         no
   'CYTS'   CoyoteStatus                         no
   'DEVC'   DeviceContainer                      GoPro GPMF
+  'DUST'   DurationSetting                      no
   'DVID'   DeviceID?                            no
   'DVNM'   DeviceName                           no
-  'DZOM'   DigitalZoom                          no
+  'DZMX'   DigitalZoomAmount                    no
+  'DZOM'   DigitalZoomOn                        no
+  'DZST'   DigitalZoom                          no
   'EISA'   ElectronicImageStabilization         no
+  'EISE'   ElectronicStabilizationOn            no
   'EMPT'   Empty?                               no
   'ESCS'   EscapeStatus?                        no
-  'EXPT'   MaximumShutterAngle                  no
+  'EXPT'   ExposureType                         no
   'FACE'   FaceDetected                         no
   'FCNM'   FaceNumbers                          no
   'FMWR'   FirmwareVersion                      no
@@ -12339,6 +12437,9 @@ L<https://github.com/gopro/gpmf-parser> for details about this format.
   'GPSU'   GPSDateTime                          no
   'GRAV'   GravityVector                        no
   'GYRO'   Gyroscope                            no
+  'HCLT'   HorizonControl                       no
+  'HDRV'   HDRVideo                             no
+  'HSGT'   HindsightSettings                    no
   'HUES'   PrediminantHue                       no
   'IORI'   ImageOrientation                     no
   'ISOE'   ISOSpeeds                            no
@@ -12346,30 +12447,45 @@ L<https://github.com/gopro/gpmf-parser> for details about this format.
   'KBAT'   BatteryStatus                        GoPro KBAT
   'LNED'   LocalPositionNED                     no
   'MAGN'   Magnetometer                         no
+  'MAPX'   MappingXCoefficients                 no
+  'MAPY'   MappingYCoefficients                 no
   'MINF'   Model                                no
+  'MMOD'   MediaMode                            no
   'MTRX'   AccelerometerMatrix                  no
   'MUID'   MediaUniqueID                        no
   'MWET'   MicrophoneWet                        no
+  'MXCF'   MappingXMode                         no
+  'MYCF'   MappingYMode                         no
+  'ORDP'   OrientationDataPresent               no
   'OREN'   AutoRotation                         no
   'ORIN'   InputOrientation                     no
   'ORIO'   OutputOrientation                    no
   'PHDR'   HDRSetting                           no
+  'PIMD'   ProtuneISOMode                       no
   'PIMN'   AutoISOMin                           no
   'PIMX'   AutoISOMax                           no
+  'POLY'   PolynomialCoefficients               no
   'PRES'   PhotoResolution                      no
-  'PRTN'   ProTune                              no
+  'PRJT'   LensProjection                       no
+  'PRTN'   Protune                              no
   'PTCL'   ColorMode                            no
   'PTEV'   ExposureCompensation                 no
   'PTSH'   Sharpness                            no
   'PTWB'   WhiteBalance                         no
+  'PWPR'   PowerProfile                         no
+  'PYCF'   PolynomialPower                      no
+  'RAMP'   SpeedRampSetting                     no
   'RATE'   Rate                                 no
   'RMRK'   Comments                             no
   'SCAL'   ScaleFactor?                         no
+  'SCAP'   ScheduleCapture                      no
   'SCEN'   SceneClassification                  no
   'SCPR'   ScaledPressure                       no
+  'SCTM'   ScheduleCaptureTime                  no
   'SHUT'   ExposureTimes                        no
   'SIMU'   ScaledIMU                            no
   'SIUN'   SIUnits?                             no
+  'SMTR'   SpotMeter                            no
   'SROT'   SensorReadoutTime                    no
   'STMP'   TimeStamp                            no
   'STNM'   StreamName?                          no
@@ -12390,6 +12506,8 @@ L<https://github.com/gopro/gpmf-parser> for details about this format.
   'WNDM'   WindProcessing                       no
   'WRGB'   WhiteBalanceRGB                      no
   'YAVG'   LumaAverage                          no
+  'ZFOV'   DiagonalFieldOfView                  no
+  'ZMPL'   ZoomScaleNormalization               no
 
 =head3 GoPro GLPI Tags
 
@@ -14728,8 +14846,11 @@ DiMAGE X and Xt.
   0x00b1   HighISONoiseReduction                int16u
   0x00b3   ToningEffect                         string
   0x00b6   PowerUpTime                          undef
-  0x00b7   AFInfo2                              Nikon AFInfo2V0400
-                                                Nikon AFInfo2
+  0x00b7   AFInfo2                              Nikon AFInfo2V0100
+                                                Nikon AFInfo2V0101
+                                                Nikon AFInfo2V0200
+                                                Nikon AFInfo2V0300
+                                                Nikon AFInfo2V0400
   0x00b8   FileInfo                             Nikon FileInfo
                                                 Nikon FileInfo
   0x00b9   AFTune                               Nikon AFTune
@@ -15035,7 +15156,7 @@ Tags written by some Nikon GPS-equipped cameras like the AW100.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
-      0    FirmwareVersion                      no
+      0    FirmwareVersion56                    no
       4    BurstGroupID                         int16u
 
 =head3 Nikon AFInfo Tags
@@ -15692,13 +15813,72 @@ These tags are extracted from encrypted data in images from the Z8.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
-     16    MenuSettingsOffsetZ8                 Nikon MenuSettingsZ8
+     16    MenuSettingsOffsetZ8v1               Nikon MenuSettingsZ8v1
            MenuSettingsOffsetZ8v2               -
                                                 Nikon MenuSettingsZ8v2
 
+=head3 Nikon MenuSettingsZ8v1 Tags
+
+These tags are used by the Z8 firmware 1.00 and 1.10.
+
+  Index1   Tag Name                             Writable
+  ------   --------                             --------
+      0    MenuSettingsZ8                       Nikon MenuSettingsZ8
+    943    CustomSettingsZ8                     NikonCustom SettingsZ8
+   1684    TimeZone                             int8u
+   1690    MonitorBrightness?                   int8u
+   1698    Language?                            int8u
+   1712    AFFineTune?                          int8u
+   1716    NonCPULens1FocalLength?              int16u~
+   1718    NonCPULens2FocalLength?              int16u~
+   1720    NonCPULens3FocalLength?              int16u~
+   1722    NonCPULens4FocalLength?              int16u~
+   1724    NonCPULens5FocalLength?              int16u~
+   1726    NonCPULens6FocalLength?              int16u~
+   1728    NonCPULens7FocalLength?              int16u~
+   1730    NonCPULens8FocalLength?              int16u~
+   1732    NonCPULens9FocalLength?              int16u~
+   1734    NonCPULens10FocalLength?             int16u~
+   1736    NonCPULens11FocalLength?             int16u~
+   1738    NonCPULens12FocalLength?             int16u~
+   1740    NonCPULens13FocalLength?             int16u~
+   1742    NonCPULens14FocalLength?             int16u~
+   1744    NonCPULens15FocalLength?             int16u~
+   1746    NonCPULens16FocalLength?             int16u~
+   1748    NonCPULens17FocalLength?             int16u~
+   1750    NonCPULens18FocalLength?             int16u~
+   1752    NonCPULens19FocalLength?             int16u~
+   1754    NonCPULens20FocalLength?             int16u~
+   1756    NonCPULens1MaxAperture?              int16u
+   1758    NonCPULens2MaxAperture?              int16u
+   1760    NonCPULens3MaxAperture?              int16u
+   1762    NonCPULens4MaxAperture?              int16u
+   1764    NonCPULens5MaxAperture?              int16u
+   1766    NonCPULens6MaxAperture?              int16u
+   1768    NonCPULens7MaxAperture?              int16u
+   1770    NonCPULens8MaxAperture?              int16u
+   1772    NonCPULens9MaxAperture?              int16u
+   1774    NonCPULens10MaxAperture?             int16u
+   1776    NonCPULens11MaxAperture?             int16u
+   1778    NonCPULens12MaxAperture?             int16u
+   1780    NonCPULens13MaxAperture?             int16u
+   1782    NonCPULens14MaxAperture?             int16u
+   1784    NonCPULens15MaxAperture?             int16u
+   1786    NonCPULens16MaxAperture?             int16u
+   1788    NonCPULens17MaxAperture?             int16u
+   1790    NonCPULens18MaxAperture?             int16u
+   1792    NonCPULens19MaxAperture?             int16u
+   1794    NonCPULens20MaxAperture?             int16u
+   1808    HDMIOutputResolution                 int8u
+   1826    AirplaneMode?                        int8u
+   1827    EmptySlotRelease?                    int8u
+   1862    EnergySavingMode?                    int8u
+   1890    USBPowerDelivery?                    int8u
+   1899    SensorShield?                        int8u
+
 =head3 Nikon MenuSettingsZ8 Tags
 
-These tags are used by the Z8 firmware 1.00.
+These tags are common to all Z8 firmware versions.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
@@ -15766,128 +15946,14 @@ These tags are used by the Z8 firmware 1.00.
     887    MovieDXCropAlert?                    int8u
     888    MovieSubjectDetection?               int8u
     896    MovieHighResZoom?                    int8u
-    943    CustomSettingsZ8                     NikonCustom SettingsZ8
-   1684    TimeZone                             int8u
-   1690    MonitorBrightness?                   int8u
-   1698    Language?                            int8u
-   1712    AFFineTune?                          int8u
-   1716    NonCPULens1FocalLength?              int16u~
-   1718    NonCPULens2FocalLength?              int16u~
-   1720    NonCPULens3FocalLength?              int16u~
-   1722    NonCPULens4FocalLength?              int16u~
-   1724    NonCPULens5FocalLength?              int16u~
-   1726    NonCPULens6FocalLength?              int16u~
-   1728    NonCPULens7FocalLength?              int16u~
-   1730    NonCPULens8FocalLength?              int16u~
-   1732    NonCPULens9FocalLength?              int16u~
-   1734    NonCPULens10FocalLength?             int16u~
-   1736    NonCPULens11FocalLength?             int16u~
-   1738    NonCPULens12FocalLength?             int16u~
-   1740    NonCPULens13FocalLength?             int16u~
-   1742    NonCPULens14FocalLength?             int16u~
-   1744    NonCPULens15FocalLength?             int16u~
-   1746    NonCPULens16FocalLength?             int16u~
-   1748    NonCPULens17FocalLength?             int16u~
-   1750    NonCPULens18FocalLength?             int16u~
-   1752    NonCPULens19FocalLength?             int16u~
-   1754    NonCPULens20FocalLength?             int16u~
-   1756    NonCPULens1MaxAperture?              int16u
-   1758    NonCPULens2MaxAperture?              int16u
-   1760    NonCPULens3MaxAperture?              int16u
-   1762    NonCPULens4MaxAperture?              int16u
-   1764    NonCPULens5MaxAperture?              int16u
-   1766    NonCPULens6MaxAperture?              int16u
-   1768    NonCPULens7MaxAperture?              int16u
-   1770    NonCPULens8MaxAperture?              int16u
-   1772    NonCPULens9MaxAperture?              int16u
-   1774    NonCPULens10MaxAperture?             int16u
-   1776    NonCPULens11MaxAperture?             int16u
-   1778    NonCPULens12MaxAperture?             int16u
-   1780    NonCPULens13MaxAperture?             int16u
-   1782    NonCPULens14MaxAperture?             int16u
-   1784    NonCPULens15MaxAperture?             int16u
-   1786    NonCPULens16MaxAperture?             int16u
-   1788    NonCPULens17MaxAperture?             int16u
-   1790    NonCPULens18MaxAperture?             int16u
-   1792    NonCPULens19MaxAperture?             int16u
-   1794    NonCPULens20MaxAperture?             int16u
-   1808    HDMIOutputResolution                 int8u
-   1826    AirplaneMode?                        int8u
-   1827    EmptySlotRelease?                    int8u
-   1862    EnergySavingMode?                    int8u
-   1890    USBPowerDelivery?                    int8u
-   1899    SensorShield?                        int8u
 
 =head3 Nikon MenuSettingsZ8v2 Tags
 
-These tags are used by the Z8 firmware 1.00.
+These tags are used by the Z8 firmware 2.00 and 2.10.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
-     72    HighFrameRate                        int8u
-    152    MultipleExposureMode                 int8u
-    154    MultiExposureShots                   int8u
-    184    IntervalDurationHours                int32u
-    188    IntervalDurationMinutes              int32u
-    192    IntervalDurationSeconds              int32u
-    200    Intervals                            int32u
-    204    ShotsPerInterval                     int32u
-    208    IntervalExposureSmoothing            int8u
-    210    IntervalPriority                     int8u
-    244    FocusShiftNumberShots                int8u
-    248    FocusShiftStepWidth                  int8u
-    252    FocusShiftInterval                   int8u~
-    256    FocusShiftExposureLock?              int8u
-    286    PhotoShootingMenuBank                int8u
-    288    ExtendedMenuBanks                    int8u
-    324    PhotoShootingMenuBankImageArea       int8u
-    338    AutoISO                              int8u
-    340    ISOAutoHiLimit?                      int16u
-    342    ISOAutoFlashLimit?                   int16u
-    350    ISOAutoShutterTime                   no
-    432    MovieVignetteControl?                int8u
-    434    DiffractionCompensation              int8u
-    436    FlickerReductionShooting             int8u
-    440    FlashControlMode                     int8u
-    548    AFAreaMode                           int8u
-    550    VRMode                               int8u
-    554    BracketSet                           int8u
-    556    BracketProgram                       int8u
-    558    BracketIncrement                     int8u
-    570    HDR                                  int8u
-    576    SecondarySlotFunction                int8u
-    582    HDRLevel                             int8u
-    586    Slot2JpgSize?                        int8u
-    592    DXCropAlert                          int8u
-    594    SubjectDetection                     int8u
-    596    DynamicAFAreaSize                    int8u
-    618    ToneMap?                             int8u
-    622    PortraitImpressionBalance            int8u
-    636    HighFrequencyFlickerReduction?       int8u
-    730    MovieImageArea?                      int8u & 0x01
-    740    MovieType?                           int8u
-    742    MovieISOAutoHiLimit?                 int16u
-    744    MovieISOAutoControlManualMode?       int8u
-    746    MovieISOAutoManualMode?              int16u
-    820    MovieActiveD-Lighting?               int8u
-    822    MovieHighISONoiseReduction?          int8u
-    828    MovieFlickerReduction                int8u
-    830    MovieMeteringMode?                   int8u
-    832    MovieFocusMode?                      int8u
-    834    MovieAFAreaMode                      int8u
-    836    MovieVRMode?                         int8u
-    840    MovieElectronicVR?                   int8u
-    842    MovieSoundRecording?                 int8u
-    844    MicrophoneSensitivity?               int8u
-    846    MicrophoneAttenuator?                int8u
-    848    MicrophoneFrequencyResponse?         int8u
-    850    WindNoiseReduction?                  int8u
-    878    MovieFrameSize?                      int8u
-    880    MovieFrameRate?                      int8u
-    886    MicrophoneJackPower?                 int8u
-    887    MovieDXCropAlert?                    int8u
-    888    MovieSubjectDetection?               int8u
-    896    MovieHighResZoom?                    int8u
+      0    MenuSettingsZ8                       Nikon MenuSettingsZ8
     943    CustomSettingsZ8                     NikonCustom SettingsZ8
    1698    Language?                            int8u
    1700    TimeZone                             int8u
@@ -15981,8 +16047,6 @@ These tags are extracted from encrypted data in images from the Z9.
            MenuSettingsOffsetZ9v4               Nikon MenuSettingsZ9v3
                                                 -
                                                 Nikon MenuSettingsZ9v4
-                                                -
-                                                Nikon MenuSettingsZ9v5
 
 =head3 Nikon MenuSettingsZ9 Tags
 
@@ -16144,7 +16208,7 @@ These tags are used by the Z9 firmware 3.00.
 
 =head3 Nikon MenuSettingsZ9v4 Tags
 
-These tags are used by the Z9 firmware 4.0.0 and 4.1.0.
+These tags are used by the Z9 firmware 4.00, 4.10, 5.00 and 5.10.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
@@ -16283,148 +16347,6 @@ These tags are used by the Z9 firmware 4.0.0 and 4.1.0.
    2068    PlaybackButtonPlaybackMode           int8u
    2070    BracketButtonPlaybackMode            int8u
    2072    FlashModeButtonPlaybackMode          int8u
-
-=head3 Nikon MenuSettingsZ9v5 Tags
-
-These tags are used by the Z9 firmware 5.1.
-
-  Index1   Tag Name                             Writable
-  ------   --------                             --------
-     72    HighFrameRate                        int8u
-    158    MultipleExposureMode                 int8u
-    160    MultiExposureShots                   int8u
-    208    Intervals                            int32u
-    212    ShotsPerInterval                     int32u
-    252    FocusShiftNumberShots                int8u
-    256    FocusShiftStepWidth                  int8u
-    260    FocusShiftInterval                   int8u~
-    264    FocusShiftExposureLock?              int8u
-    294    PhotoShootingMenuBank                int8u
-    296    ExtendedMenuBanks                    int8u
-    332    PhotoShootingMenuBankImageArea       int8u
-    346    AutoISO                              int8u
-    348    ISOAutoHiLimit?                      int16u
-    350    ISOAutoFlashLimit?                   int16u
-    358    ISOAutoShutterTime                   no
-    440    MovieVignetteControl?                int8u
-    442    DiffractionCompensation              int8u
-    444    FlickerReductionShooting             int8u
-    448    FlashControlMode                     int8u
-    450    FlashMasterCompensation?             int8s
-    454    FlashGNDistance?                     no
-    458    FlashOutput?                         int8u
-    552    AFAreaMode                           int8u
-    554    VRMode                               int8u
-    558    BracketSet                           int8u
-    560    BracketProgram                       int8u
-    562    BracketIncrement                     int8u
-    574    HDR                                  int8u
-    580    SecondarySlotFunction                int8u
-    586    HDRLevel                             int8u
-    590    Slot2JpgSize?                        int8u
-    596    DXCropAlert                          int8u
-    598    SubjectDetection                     int8u
-    600    DynamicAFAreaSize                    int8u
-    640    HighFrequencyFlickerReduction?       int8u
-    650    MovieImageArea?                      int8u & 0x01
-    660    MovieType?                           int8u
-    662    MovieISOAutoHiLimit?                 int16u
-    664    MovieISOAutoControlManualMode?       int8u
-    666    MovieISOAutoManualMode?              int16u
-    740    MovieActiveD-Lighting?               int8u
-    742    MovieHighISONoiseReduction?          int8u
-    748    MovieFlickerReduction                int8u
-    750    MovieMeteringMode?                   int8u
-    752    MovieFocusMode?                      int8u
-    754    MovieAFAreaMode                      int8u
-    756    MovieVRMode?                         int8u
-    760    MovieElectronicVR?                   int8u
-    762    MovieSoundRecording?                 int8u
-    764    MicrophoneSensitivity?               int8u
-    766    MicrophoneAttenuator?                int8u
-    768    MicrophoneFrequencyResponse?         int8u
-    770    WindNoiseReduction?                  int8u
-    792    MovieToneMap?                        int8u
-    798    MovieFrameSize?                      int8u
-    800    MovieFrameRate?                      int8u
-    806    MicrophoneJackPower?                 int8u
-    807    MovieDXCropAlert?                    int8u
-    808    MovieSubjectDetection?               int8u
-    816    MovieHighResZoom?                    int8u
-    851    CustomSettingsZ9v4                   NikonCustom SettingsZ9v4
-   1502    Language?                            int8u
-   1504    TimeZone                             int8u
-   1510    MonitorBrightness?                   int8u
-   1532    AFFineTune?                          int8u
-   1536    NonCPULens1FocalLength?              int16s~
-   1540    NonCPULens2FocalLength?              int16s~
-   1542    NonCPULens3FocalLength?              int16s~
-   1548    NonCPULens4FocalLength?              int16s~
-   1552    NonCPULens5FocalLength?              int16s~
-   1556    NonCPULens6FocalLength?              int16s~
-   1560    NonCPULens7FocalLength?              int16s~
-   1564    NonCPULens8FocalLength?              int16s~
-   1568    NonCPULens9FocalLength?              int16s~
-   1572    NonCPULens10FocalLength?             int16s~
-   1576    NonCPULens11FocalLength?             int16s~
-   1580    NonCPULens12FocalLength?             int16s~
-   1584    NonCPULens13FocalLength?             int16s~
-   1588    NonCPULens14FocalLength?             int16s~
-   1592    NonCPULens15FocalLength?             int16s~
-   1596    NonCPULens16FocalLength?             int16s~
-   1600    NonCPULens17FocalLength?             int16s~
-   1604    NonCPULens18FocalLength?             int16s~
-   1608    NonCPULens19FocalLength?             int16s~
-   1612    NonCPULens20FocalLength?             int16s~
-   1616    NonCPULens1MaxAperture?              int16s~
-   1620    NonCPULens2MaxAperture?              int16s~
-   1624    NonCPULens3MaxAperture?              int16s~
-   1628    NonCPULens4MaxAperture?              int16s~
-   1632    NonCPULens5MaxAperture?              int16s~
-   1636    NonCPULens6MaxAperture?              int16s~
-   1640    NonCPULens7MaxAperture?              int16s~
-   1644    NonCPULens8MaxAperture?              int16s~
-   1648    NonCPULens9MaxAperture?              int16s~
-   1652    NonCPULens10MaxAperture?             int16s~
-   1656    NonCPULens11MaxAperture?             int16s~
-   1660    NonCPULens12MaxAperture?             int16s~
-   1664    NonCPULens13MaxAperture?             int16s~
-   1668    NonCPULens14MaxAperture?             int16s~
-   1672    NonCPULens15MaxAperture?             int16s~
-   1676    NonCPULens16MaxAperture?             int16s~
-   1680    NonCPULens17MaxAperture?             int16s~
-   1684    NonCPULens18MaxAperture?             int16s~
-   1688    NonCPULens19MaxAperture?             int16s~
-   1692    NonCPULens20MaxAperture?             int16s~
-   1708    HDMIOutputResolution                 int8u
-   1721    SetClockFromLocationData?            int8u
-   1728    AirplaneMode?                        int8u
-   1729    EmptySlotRelease?                    int8u
-   1764    EnergySavingMode?                    int8u
-   1788    RecordLocationData?                  int8u
-   1792    USBPowerDelivery?                    int8u
-   1801    SensorShield?                        int8u
-   1866    AutoCapturePreset                    int8u
-   1868    FocusShiftAutoReset?                 int8u
-   1926    PreReleaseBurstLength                int8u
-   1928    PostReleaseBurstLength               int8u
-   1942    VerticalISOButton                    int8u
-   1944    ExposureCompensationButton           int8u
-   1946    ISOButton                            int8u
-   2006    ViewModeShowEffectsOfSettings?       int8u
-   2008    DispButton                           int8u
-   2052    ExposureDelay                        fixed32u~
-   2056    CommandDialFrameAdvanceZoom?         int8u
-   2058    SubCommandDialFrameAdvanceZoom?      int8u
-   2060    PlaybackButton                       int8u
-   2062    WBButton                             int8u
-   2064    BracketButton                        int8u
-   2066    FlashModeButton                      int8u
-   2068    LensFunc1ButtonPlaybackMode          int8u
-   2070    LensFunc2ButtonPlaybackMode          int8u
-   2072    PlaybackButtonPlaybackMode           int8u
-   2074    BracketButtonPlaybackMode            int8u
-   2076    FlashModeButtonPlaybackMode          int8u
 
 =head3 Nikon ShotInfo Tags
 
@@ -16807,49 +16729,22 @@ These tags are used by the D4S, D750, D810, D5500, D7200 (FlashInfoVersion
       2    MultiExposureShots                   int32u
       3    MultiExposureOverlayMode             int32u
 
-=head3 Nikon AFInfo2V0400 Tags
+=head3 Nikon AFInfo2V0100 Tags
 
-AF information for Nikon cameras with the Expeed 7 processor: The Zf, Z6_3,
-Z8, Z9 and Z50_3.
-
-  Index1   Tag Name                             Writable
-  ------   --------                             --------
-      0    AFInfo2Version                       no
-      5    AFAreaMode                           int8u
-     10    AFPointsUsed                         undef[51]
-           AFPointsUsed                         undef[38]
-           AFPointsUsed                         undef[29]
-     62    AFImageWidth                         int16u
-     64    AFImageHeight                        int16u
-     66    AFAreaXPosition                      int16u
-     68    AFAreaYPosition                      int16u
-     70    AFAreaWidth                          int16u
-     72    AFAreaHeight                         int16u
-     74    FocusResult                          int8u
-
-=head3 Nikon AFInfo2 Tags
-
-These tags are written by Nikon DSLR's which have the live view feature.
+AF information for Nikon cameras with LiveView that were introduced 2007
+thru 2015 (and the D5600 in 2016), including D3, D4, D3000, D3100-D3300,
+D5000-D5600, D6x0, D700, D7000, D7100, D810
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
       0    AFInfo2Version                       no
-      4    ContrastDetectAF                     int8u
+      4    AFDetectionMethod                    int8u
       5    AFAreaMode                           int8u
-      6    PhaseDetectAF                        int8u
       7    PrimaryAFPoint                       int8u
       8    AFPointsUsed                         undef[7]
            AFPointsUsed                         undef[2]
            AFPointsUsed                         undef[5]
-           AFPointsUsed                         undef[17]
-           AFPointsUsed                         undef[21]
-           AFPointsUsed                         undef[29]
-           AFPointsUsed                         undef[20]
-           AFPointsUsed                         undef[7]
-           PrimaryAFPoint                       int8u
-     10    AFPointsUsed                         undef[7]
-           AFPointsUsed                         undef[11]
-           AFPointsUsed                         undef[14]
+           AFPointsUsed                         int8u
      16    AFImageWidth                         int16u
      18    AFImageHeight                        int16u
      20    AFAreaXPosition                      int16u
@@ -16858,16 +16753,25 @@ These tags are written by Nikon DSLR's which have the live view feature.
      26    AFAreaHeight                         int16u
      28    ContrastDetectAFInFocus              int8u
            AFPointsSelected                     undef[20]
-     42    AFImageWidth                         int16u
-     44    AFImageHeight                        int16u
-     46    AFAreaXPosition                      int16u
-     47    FocusPositionHorizontal              int8u~
-     48    AFAreaYPosition                      int16u
+
+=head3 Nikon AFInfo2V0101 Tags
+
+AF information for Nikon cameras D5, D500, D850, D3400, D3500 and D7500
+
+  Index1   Tag Name                             Writable
+  ------   --------                             --------
+      0    AFInfo2Version                       no
+      4    AFDetectionMethod                    int8u
+      5    AFAreaMode                           int8u
+      8    AFPointsUsed                         undef[7]
+           AFPointsUsed                         undef[2]
+           AFPointsUsed                         undef[20]
+           AFPointsUsed                         int8u
+     28    ContrastDetectAFInFocus              int8u
+           AFPointsUsed                         undef[7]
+           AFPointsSelected                     undef[20]
+     48    AFPointsInFocus                      undef[7]
            AFPointsInFocus                      undef[20]
-     49    FocusPositionVertical                int8u~
-     50    AFAreaWidth                          int16u
-     52    AFAreaHeight                         int16u
-     56    PrimaryAFPoint                       int8u
      68    PrimaryAFPoint                       int8u
      70    AFImageWidth                         int16u
      72    AFImageHeight                        int16u
@@ -16876,6 +16780,69 @@ These tags are written by Nikon DSLR's which have the live view feature.
      78    AFAreaWidth                          int16u
      80    AFAreaHeight                         int16u
      82    ContrastDetectAFInFocus              int8u
+
+=head3 Nikon AFInfo2V0200 Tags
+
+AF information for Nikon 1 series cameras: Nikon 1 V1, V2, V3, J1, J2, J3,
+S1, S2 AW1.
+
+  Index1   Tag Name                             Writable
+  ------   --------                             --------
+      0    AFInfo2Version                       no
+      5    AFAreaMode                           int8u
+      6    PhaseDetectAF                        int8u
+      7    PrimaryAFPoint                       int8u
+      8    AFPointsUsed                         undef[17]
+           AFPointsUsed                         undef[21]
+           AFPointsUsed                         undef[29]
+
+=head3 Nikon AFInfo2V0300 Tags
+
+AF information for Nikon cameras with the Expeed 6 processor: D6, D780, Z5,
+Z6, Z6ii, Z7, Z7ii, Z50 and Zfc.
+
+  Index1   Tag Name                             Writable
+  ------   --------                             --------
+      0    AFInfo2Version                       no
+      4    AFDetectionMethod                    int8u
+      5    AFAreaMode                           int8u
+      7    AFCoordinatesAvailable               int8u
+     10    AFPointsUsed                         undef[7]
+           AFPointsUsed                         undef[11]
+           AFPointsUsed                         undef[14]
+     42    AFImageWidth                         int16u
+     44    AFImageHeight                        int16u
+     46    AFAreaXPosition                      int16u
+     47    FocusPositionHorizontal              no
+     48    AFAreaYPosition                      int16u
+     49    FocusPositionVertical                no
+     50    AFAreaWidth                          int16u
+     52    AFAreaHeight                         int16u
+     56    PrimaryAFPoint                       int8u
+
+=head3 Nikon AFInfo2V0400 Tags
+
+AF information for Nikon cameras with the Expeed 7 processor: The Zf, Z6_3,
+Z8, Z9 and Z50_3.
+
+  Index1   Tag Name                             Writable
+  ------   --------                             --------
+      0    AFInfo2Version                       no
+      4    AFDetectionMethod                    int8u
+      5    AFAreaMode                           int8u
+      7    AFCoordinatesAvailable               int8u
+     10    AFPointsUsed                         undef[51]
+           AFPointsUsed                         undef[38]
+           AFPointsUsed                         undef[29]
+     62    AFImageWidth                         int16u
+     64    AFImageHeight                        int16u
+     66    AFAreaXPosition                      int16u
+     67    FocusPositionHorizontal              no
+     68    AFAreaYPosition                      int16u
+     69    FocusPositionVertical                no
+     70    AFAreaWidth                          int16u
+     72    AFAreaHeight                         int16u
+     74    FocusResult                          int8u
 
 =head3 Nikon FileInfo Tags
 
@@ -17155,7 +17122,11 @@ videos from some Nikon cameras.
                FlashInfoUnknown                 Nikon FlashInfoUnknown
   0x20000ab    VariProgram                      no
   0x20000b1    HighISONoiseReduction            no
-  0x20000b7    AFInfo2                          Nikon AFInfo2
+  0x20000b7    AFInfo2                          Nikon AFInfo2V0100
+                                                Nikon AFInfo2V0101
+                                                Nikon AFInfo2V0200
+                                                Nikon AFInfo2V0300
+                                                Nikon AFInfo2V0400
   0x20000c3    BarometerInfo                    Nikon BarometerInfo
 
 =head3 Nikon MOV Tags
@@ -23069,7 +23040,8 @@ Valid from July 2020 for ILCE-1/7SM3, ILME-FX3.
 
 =head3 Sony Tag9050d Tags
 
-Valid for ILCE-6700/7CM2/7CR/ZV-E1.
+Valid for ILCE-6700/7CM2/7CR/ZV-E1. Also for ILCE-1M2 when using mechanical
+shutter.
 
   Index1   Tag Name                             Writable
   ------   --------                             --------
@@ -23945,6 +23917,7 @@ JSON-formatted files.
 
   Tag Name                                      Writable
   --------                                      --------
+  AdjustmentsSettingsStatisticsLightMap         no
   ON1_SettingsData                              PLIST
   ON1_SettingsMetadataCreated                   no
   ON1_SettingsMetadataModified                  no
@@ -23979,24 +23952,43 @@ files, and will extract any existing tags even if they aren't listed below.
 These tags belong to the family 0 "PLIST" group, but family 1 group may be
 either "XML" or "PLIST" depending on whether the format is XML or binary.
 
-  Tag ID                       Tag Name         Writable
-  ------                       --------         --------
+  Tag ID     Tag Name                           Writable
+  ------     --------                           --------
   'MetaDataList//DateTimeOriginal'
-                               DateTimeOriginal no
-  'MetaDataList//Duration'     Duration         no
+             DateTimeOriginal                   no
+  'MetaDataList//Duration' Duration             no
   'MetaDataList//Geolocation/Latitude'
-                               GPSLatitude      no
+             GPSLatitude                        no
   'MetaDataList//Geolocation/Longitude'
-                               GPSLongitude     no
+             GPSLongitude                       no
   'MetaDataList//Geolocation/MapDatum'
-                               GPSMapDatum      no
-  'XMLFileType'                XMLFileType      no
-  'cast//name'                 Cast             no+
-  'codirectors//name'          Codirectors      no+
-  'directors//name'            Directors        no+
-  'producers//name'            Producers        no+
-  'screenwriters//name'        Screenwriters    no+
-  'studio//name'               Studio           no+
+             GPSMapDatum                        no
+  'XMLFileType' XMLFileType                     no
+  'adjustmentData' AdjustmentData               PLIST
+  'cast//name' Cast                             no+
+  'codirectors//name' Codirectors               no+
+  'directors//name' Directors                   no+
+  'producers//name' Producers                   no+
+  'screenwriters//name' Screenwriters           no+
+  'slowMotion/rate' SlowMotionRate              no
+  'slowMotion/regions' SlowMotionRegions        no
+  'slowMotion/regions/timeRange/duration/epoch'
+             SlowMotionRegionsDurationEpoch     no
+  'slowMotion/regions/timeRange/duration/flags'
+             SlowMotionRegionsDurationFlags     no
+  'slowMotion/regions/timeRange/duration/timescale'
+             SlowMotionRegionsDurationTimeScale no
+  'slowMotion/regions/timeRange/duration/value'
+             SlowMotionRegionsDurationValue     no
+  'slowMotion/regions/timeRange/start/epoch'
+             SlowMotionRegionsStartTimeEpoch    no
+  'slowMotion/regions/timeRange/start/flags'
+             SlowMotionRegionsStartTimeFlags    no
+  'slowMotion/regions/timeRange/start/timescale'
+             SlowMotionRegionsStartTimeScale    no
+  'slowMotion/regions/timeRange/start/value'
+             SlowMotionRegionsStartTimeValue    no
+  'studio//name' Studio                         no+
 
 =head2 CanonRaw Tags
 
@@ -26328,6 +26320,57 @@ even if it is not listed in this table.
   YhiYloCorK1                                   no
   YhiYloCorK2                                   no
 
+=head3 Qualcomm DualCamera Tags
+
+Found in JPEG APP4 "Qualcomm Dual Camera Attributes" written by some Nokia
+phones.
+
+  Tag Name                                      Writable
+  --------                                      --------
+  AF_ROIHeight                                  no
+  AF_ROILeft                                    no
+  AF_ROITop                                     no
+  AF_ROIWidth                                   no
+  CAMIFCropHeight                               no
+  CAMIFCropLeft                                 no
+  CAMIFCropTop                                  no
+  CAMIFCropWidth                                no
+  CAMIF_ROIMapHeight                            no
+  CAMIF_ROIMapLeft                              no
+  CAMIF_ROIMapTop                               no
+  CAMIF_ROIMapWidth                             no
+  CPPCropHeight                                 no
+  CPPCropLeft                                   no
+  CPPCropTop                                    no
+  CPPCropWidth                                  no
+  CPP_ROIMapHeight                              no
+  CPP_ROIMapLeft                                no
+  CPP_ROIMapTop                                 no
+  CPP_ROIMapWidth                               no
+  CurrentPipelineMirrorFlipSetting              no
+  CurrentPipelineRotationSetting                no
+  DDMCropHeight                                 no
+  DDMCropLeft                                   no
+  DDMCropTop                                    no
+  DDMCropWidth                                  no
+  FocalLengthRatio                              no
+  ISPCropHeight                                 no
+  ISPCropLeft                                   no
+  ISPCropTop                                    no
+  ISPCropWidth                                  no
+  ISP_ROIMapHeight                              no
+  ISP_ROIMapLeft                                no
+  ISP_ROIMapTop                                 no
+  ISP_ROIMapWidth                               no
+  SensorCropHeight                              no
+  SensorCropLeft                                no
+  SensorCropTop                                 no
+  SensorCropWidth                               no
+  SensorROIMapHeight                            no
+  SensorROIMapLeft                              no
+  SensorROIMapTop                               no
+  SensorROIMapWidth                             no
+
 =head2 Jpeg2000 Tags
 
 The tags below are found in JPEG 2000 images and the C2PA CAI JUMBF metadata
@@ -26625,6 +26668,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   EventID                                       string/_
   EventRemarks                                  lang-alt_
   EventTime                                     string_
+  EventEventType                                string_
   EventFieldNotes                               string_
   EventFieldNumber                              string_
   EventHabitat                                  string_
@@ -26667,6 +26711,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   HumanObservationEventID                       string/_
   HumanObservationEventRemarks                  lang-alt_
   HumanObservationEventTime                     string_
+  HumanObservationEventType                     string_
   HumanObservationFieldNotes                    string_
   HumanObservationFieldNumber                   string_
   HumanObservationHabitat                       string_
@@ -26701,6 +26746,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   MachineObservationEventID                     string/_
   MachineObservationEventRemarks                lang-alt_
   MachineObservationEventTime                   string_
+  MachineObservationEventType                   string_
   MachineObservationFieldNotes                  string_
   MachineObservationFieldNumber                 string_
   MachineObservationHabitat                     string_
@@ -26726,6 +26772,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   MeasurementType                               string_
   MeasurementUnit                               string_
   MeasurementValue                              string_
+  ParentMeasurementID                           string_
   Occurrence                                    DarwinCore Occurrence Struct
   OccurrenceAssociatedMedia                     string_
   OccurrenceAssociatedOccurrences               string_
@@ -26733,6 +26780,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   OccurrenceAssociatedSequences                 string_
   OccurrenceAssociatedTaxa                      string_
   OccurrenceBehavior                            string_
+  OccurrenceCaste                               string_
   OccurrenceCatalogNumber                       string_
   OccurrenceDegreeOfEstablishment               string_
   OccurrenceDisposition                         string_
@@ -26756,6 +26804,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   OccurrenceRecordNumber                        string_
   OccurrenceReproductiveCondition               string_
   OccurrenceSex                                 string_
+  OccurrenceVitality                            string_
   Organism                                      DarwinCore Organism Struct
   OrganismAssociatedOccurrences                 string_
   OrganismAssociatedOrganisms                   string_
@@ -26793,8 +26842,10 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   TaxonClass                                    string_
   TaxonCultivarEpithet                          string_
   TaxonFamily                                   string_
+  TaxonGenericName                              string_
   TaxonGenus                                    string_
   TaxonHigherClassification                     string_
+  TaxonInfragenericEpithet                      string_
   TaxonInfraspecificEpithet                     string_
   TaxonKingdom                                  string_
   TaxonNameAccordingTo                          string_
@@ -26814,12 +26865,16 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   TaxonScientificNameAuthorship                 string_
   TaxonScientificNameID                         string_
   TaxonSpecificEpithet                          string_
+  TaxonSubFamily                                string_
   TaxonSubgenus                                 string_
+  TaxonSubTribe                                 string_
+  TaxonSuperFamily                              string_
   TaxonConceptID                                string_
   TaxonID                                       string_
   TaxonTaxonomicStatus                          string_
   TaxonRank                                     string_
   TaxonRemarks                                  string_
+  TaxonTribe                                    string_
   TaxonVerbatimTaxonRank                        string_
   TaxonVernacularName                           lang-alt_
 
@@ -26884,6 +26939,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   EventID                                       string
   EventRemarks                                  lang-alt
   EventTime                                     string
+  EventType                                     string
   FieldNotes                                    string
   FieldNumber                                   string
   Habitat                                       string
@@ -26955,6 +27011,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   MeasurementType                               string
   MeasurementUnit                               string
   MeasurementValue                              string
+  ParentMeasurementID                           string
 
 =head3 DarwinCore Occurrence Struct
 
@@ -26966,6 +27023,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   AssociatedSequences                           string
   AssociatedTaxa                                string
   Behavior                                      string
+  Caste                                         string
   CatalogNumber                                 string
   DegreeOfEstablishment                         string
   Disposition                                   string
@@ -26989,6 +27047,7 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   RecordedByID                                  string
   ReproductiveCondition                         string
   Sex                                           string
+  Vitality                                      string
 
 =head3 DarwinCore Organism Struct
 
@@ -27040,8 +27099,10 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   Class                                         string
   CultivarEpithet                               string
   Family                                        string
+  GenericName                                   string
   Genus                                         string
   HigherClassification                          string
+  InfragenericEpithet                           string
   InfraspecificEpithet                          string
   Kingdom                                       string
   NameAccordingTo                               string
@@ -27061,12 +27122,16 @@ These tags belong to the ExifTool XMP-dwc family 1 group.
   ScientificNameAuthorship                      string
   ScientificNameID                              string
   SpecificEpithet                               string
+  SubFamily                                     string
+  SubTribe                                      string
   Subgenus                                      string
+  SuperFamily                                   string
   TaxonConceptID                                string
   TaxonID                                       string
   TaxonRank                                     string
   TaxonRemarks                                  string
   TaxonomicStatus                               string
+  Tribe                                         string
   VerbatimTaxonRank                             string
   VernacularName                                lang-alt
 
@@ -28489,6 +28554,7 @@ check if speed is more of a concern.
   'gIFg'             GIFGraphicControlExtension no
   'gIFt'             GIFPlainTextExtension      no
   'gIFx'             GIFApplicationExtension    no
+  'gdAT'             GainMapImage               no
   'hIST'             PaletteHistogram           no
   'iCCP'             ICC_Profile                ICC_Profile
   'iCCP-name'        ProfileName                yes
@@ -29507,6 +29573,7 @@ C<integer>, C<real>, C<boolean> or C<name> for PDF tags.
   'Keywords'           Keywords                 string+
   'ModDate'            ModifyDate               date
   'Producer'           Producer                 string
+  'SourceModified'     SourceModified           date
   'Subject'            Subject                  string
   'Title'              Title                    string
   'Trapped'            Trapped                  string!
@@ -30284,7 +30351,7 @@ for the official QuickTime specification.
 The tags below are extracted from timed metadata in QuickTime and other
 formats of video files when the ExtractEmbedded option is used.  Although
 most of these tags are combined into the single table below, ExifTool
-currently reads 100 different types of timed GPS metadata from video files.
+currently reads 103 different types of timed GPS metadata from video files.
 
   Tag Name                                      Writable
   --------                                      --------
@@ -30955,7 +31022,7 @@ and are not currently writable.
   'hvcC'   HEVCConfiguration                    QuickTime HEVCConfig
   'irot'   Rotation                             int8u!
   'ispe'   ImageSpatialExtent                   no
-  'pasp'   PixelAspectRatio                     int32u!
+  'pasp'   PixelAspectRatio                     int32u[2]!
   'pixi'   ImagePixelDepth                      no
   'rloc'   RelativeLocation                     no
 
@@ -31192,7 +31259,7 @@ MP4 sample table box.
   'stps'   PartialSyncSamples                   no
   'stsc'   SampleToChunk?                       no
   'stsd'   AudioSampleDesc                      QuickTime AudioSampleDesc
-           VideoSampleDesc                      QuickTime ImageDesc
+           VisualSampleDesc                     QuickTime VisualSampleDesc
            HintSampleDesc                       QuickTime HintSampleDesc
            MetaSampleDesc                       QuickTime MetaSampleDesc
            OtherSampleDesc                      QuickTime OtherSampleDesc
@@ -31338,7 +31405,7 @@ Child atoms found in "sinf" and/or "pinf" atoms.
   'enda'   Endianness                           no
   'frma'   PurchaseFileFormat                   no
 
-=head3 QuickTime ImageDesc Tags
+=head3 QuickTime VisualSampleDesc Tags
 
   ID/Index Tag Name                             Writable
   -------- --------                             --------
@@ -31533,6 +31600,7 @@ the config file.
   'Lvlm'       LevelMeter?                      rational64s
   'MMA0'       MinoltaMMA0                      Minolta MMA
   'MMA1'       MinoltaMMA1                      Minolta MMA
+  'MUID'       MediaUID                         no
   'MVTG'       FujiFilmMVTG                     EXIF
   'NCDT'       NikonNCDT                        Nikon NCDT
   'PANA'       PanasonicPANA                    Panasonic PANA
@@ -31579,6 +31647,7 @@ the config file.
   'angl'       CameraAngle                      string
   'apmd'       ApertureMode                     undef
   'auth'       Author                           string/
+  'btec'       GlamourSettings                  DJI Glamour
   'ccid'       ContentID                        string
   'cdis'       ContentDistributorID             string
   'chpl'       ChapterList                      no
@@ -31594,6 +31663,7 @@ the config file.
   'date'       DateTimeOriginal                 string
   'dscp'       Description                      string/
   'finm'       OriginalFileName                 no
+  'fsid'       OriginalFilePath                 string
   'gnre'       Genre                            string/
   'hinf'       HintTrackInfo                    QuickTime HintTrackInfo
   'hinv'       HintVersion                      string
@@ -32021,7 +32091,7 @@ Tags used in QTIF QuickTime Image Files.
   Tag ID   Tag Name                             Writable
   ------   --------                             --------
   'idat'   ImageData                            no
-  'idsc'   ImageDescription                     QuickTime ImageDesc
+  'idsc'   ImageDescription                     QuickTime VisualSampleDesc
   'iicc'   ICC_Profile                          ICC_Profile
 
 =head2 RIFF Tags
@@ -40105,6 +40175,42 @@ Information extracted from MS Shell Link (Windows shortcut) files.
   ------   --------                             --------
       8    CodePage                             no
 
+=head2 PCAP Tags
+
+Tags extracted from  CAP, PCAP and PCAPNG Packet Capture files.
+
+  Tag ID               Tag Name                 Writable
+  ------               --------                 --------
+  0x0001               Comment                  no
+  0x0bac               CustomOption1            no
+  0x0bad               CustomOption2            no
+  0x4bac               CustomOption3            no
+  0x4bad               CustomOption3            no
+  'ByteOrder'          ByteOrder                no
+  'IDB-2'              DeviceName               no
+  'IDB-3'              Description              no
+  'IDB-4'              IPv4Addr                 no
+  'IDB-5'              IPv6Addr                 no
+  'IDB-6'              MACAddr                  no
+  'IDB-7'              EUIAddr                  no
+  'IDB-8'              Speed                    no
+  'IDB-9'              TimeStampResolution      no
+  'IDB-10'             TimeZone                 no
+  'IDB-11'             Filter                   no
+  'IDB-12'             OperatingSytem           no
+  'IDB-13'             FCSLen                   no
+  'IDB-14'             TimeStampOffset          no
+  'IDB-15'             Hardware                 no
+  'IDB-16'             TXSpeed                  no
+  'IDB-17'             RXSpeed                  no
+  'IDB-18'             TimezoneName             no
+  'LinkType'           LinkType                 no
+  'PCAPVersion'        PCAPVersion              no
+  'SHB-2'              Hardware                 no
+  'SHB-3'              OperatingSytem           no
+  'SHB-4'              UserApplication          no
+  'TimeStamp'          TimeStamp                no
+
 =head2 Font Tags
 
 This table contains a collection of tags found in font files of various
@@ -40978,8 +41084,7 @@ values, may created via the ExifTool configuration file.
                        MPEG:SampleRate
                        MPEG:VBRBytes
                        MPEG:VBRFrames
-  AutoFocus            Nikon:PhaseDetectAF      no
-                       Nikon:ContrastDetectAF
+  AutoFocus            Nikon:FocusMode          no
   AvgBitrate           QuickTime::MediaDataSize no
                        QuickTime::Duration
   BlueBalance          WB_RGGBLevels            no
@@ -41000,6 +41105,8 @@ values, may created via the ExifTool configuration file.
   CircleOfConfusion    ScaleFactor35efl         no
   ConditionalFEC       FlashExposureComp        no
                        FlashBits
+  ContrastDetectAF     Nikon:FocusMode          no
+                       Nikon:AFDetectionMethod
   DOF                  FocalLength              no
                        Aperture
                        CircleOfConfusion
@@ -41193,6 +41300,8 @@ values, may created via the ExifTool configuration file.
                        OtherImageStart (1)
                        OtherImageLength (1)
   PeakSpectralSensitivity FLIR:PlanckB          no
+  PhaseDetectAF        Nikon:FocusPointSchema   no
+                       Nikon:AFDetectionMethod
   PreviewImage         PreviewImageStart        yes
                        PreviewImageLength
                        PreviewImageValid
