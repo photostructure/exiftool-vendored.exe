@@ -15,6 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Configure git line endings
+        run: |
+          git config core.autocrlf input
+          git config core.eol lf
+      
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -30,8 +35,14 @@ jobs:
           # Run update and capture if changes were made
           npm run update-exiftool
           
-          # Check if there are any changes
-          if git diff --quiet && git diff --cached --quiet; then
+          # Normalize line endings to avoid false positives
+          git add --renormalize .
+          
+          # Check if there are any changes beyond just line endings
+          git diff --cached --stat
+          
+          # Check if there are any real changes
+          if [ -z "$(git diff --cached --name-only)" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "No updates available"
           else
