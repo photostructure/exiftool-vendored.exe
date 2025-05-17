@@ -51,6 +51,10 @@ jobs:
             NEW_VERSION=${NEW_VERSION_FULL%-pre}
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "Updates available, new version: $NEW_VERSION"
+            
+            # Normalize line endings to ensure clean PR
+            echo "Normalizing line endings..."
+            git add --renormalize .
           fi
       
       - name: Run tests

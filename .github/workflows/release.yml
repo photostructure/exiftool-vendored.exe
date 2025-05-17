@@ -52,11 +52,6 @@ jobs:
         run: |
           git config user.name "${{ secrets.GIT_USER_NAME }}"
           git config user.email "${{ secrets.GIT_USER_EMAIL }}"
-      
-      - name: Check git status
-        run: |
-          echo "Git status before release:"
-          git status --porcelain
 
       - name: Release
         # Note: we're using npx to avoid installing release-it via `npm ci`, so
