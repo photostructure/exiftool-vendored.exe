@@ -1,15 +1,15 @@
 {
   "name": "exiftool-vendored.exe",
-  "version": "13.26.0",
+  "version": "13.26.0-pre",
   "description": "Vendored win32 ExifTool for Node.js",
   "main": "./index.js",
   "homepage": "https://github.com/photostructure/exiftool-vendored.exe#readme",
   "bugs": {
-    "url": "https://github.com/photostructure/exiftool-vendored.js/issues"
+    "url": "https://github.com/photostructure/exiftool-vendored/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/photostructure/exiftool-vendored.exe.git"
+    "url": "git@github.com:photostructure/exiftool-vendored.exe.git"
   },
   "os": [
     "win32"
@@ -27,24 +27,27 @@
   "scripts": {
     "prettier": "prettier --write *.js test/*.js",
     "test": "mocha",
-    "update": "node update-exiftool.js"
+    "update-exiftool": "node update-exiftool.js",
+    "release": "release-it"
   },
   "release-it": {
-    "hooks": {
-      "before:init": [
-        "npm i",
-        "npm t"
-      ]
+    "git": {
+      "requireBranch": "main",
+      "commitMessage": "Release ${version}",
+      "tagName": "${version}"
     },
     "github": {
       "release": true
+    },
+    "npm": {
+      "publish": true
     }
   },
   "devDependencies": {
     "axios": "^1.8.4",
     "mocha": "^11.1.0",
     "prettier": "^3.5.3",
-    "release-it": "^18.1.2",
+    "release-it": "^19.0.2",
     "unzipper": "^0.12.3",
     "xml2js": "^0.6.2"
   }

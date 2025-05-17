@@ -1,0 +1,79 @@
+name: Check for ExifTool Updates
+
+on:
+  schedule:
+    - cron: '0 6 * * MON' # Run every Monday at 6 AM UTC
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  check-updates:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Update ExifTool
+        id: update
+        run: |
+          # Run update and capture if changes were made
+          npm run update-exiftool
+          
+          # Check if there are any changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No updates available"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            # Get the new version from package.json (remove -pre suffix for display)
+            FULL_VERSION=$(node -p "require('./package.json').version")
+            NEW_VERSION=${FULL_VERSION%-pre}
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "Updates available, new version: $NEW_VERSION"
+          fi
+      
+      - name: Run tests
+        if: steps.update.outputs.changed == 'true'
+        run: npm test
+      
+      - name: Create Pull Request
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sign-commits: true
+          commit-message: "chore(ExifTool): v${{ steps.update.outputs.new_version }}"
+          title: "Update ExifTool to v${{ steps.update.outputs.new_version }}"
+          body: |
+            Updates ExifTool to v${{ steps.update.outputs.new_version }}.
+            
+            This is an automated update created by the check-updates workflow.
+            
+            ## Changes
+            - Updated ExifTool binary to latest version
+            - Package version updated to ${{ steps.update.outputs.new_version }}-pre (will be finalized during release)
+            
+            ## Testing
+            - ✅ Tests passed successfully
+            
+            ## Next Steps
+            After merging this PR:
+            1. Go to the Actions tab
+            2. Run the "Release" workflow to publish to npm
+            
+            Please review the changes and merge if everything looks good.
+          branch: update-exiftool-${{ steps.update.outputs.new_version }}
+          delete-branch: true
+          labels: |
+            dependencies
+            automated

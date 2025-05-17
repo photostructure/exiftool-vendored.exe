@@ -134,13 +134,23 @@ async function run() {
   }
 
   const expectedZipOutDir = join(dir, basename.replace(/\.zip$/, ""));
-  await rm(expectedZipOutDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
+  await rm(expectedZipOutDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 1000,
+  });
   await asyncPipeline(
     createReadStream(zipPath),
     unzipper.Extract({ path: dir }),
   );
   const destDir = join(__dirname, "bin");
-  await rm(destDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
+  await rm(destDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 1000,
+  });
   await rename(expectedZipOutDir, destDir);
   await rename(
     join(__dirname, "bin", "exiftool(-k).exe"),
@@ -151,15 +161,21 @@ async function run() {
     .stdout.toString()
     .trim();
 
-  const pkgVer = version + ".0-pre";
+  // Check if there are any pending updates
+  const gitStatus = spawnSync("git", ["status", "--porcelain=v1"])
+    .stdout.toString()
+    .trim();
 
-  console.log("Updating package.json to version " + pkgVer);
-
-  spawnSync("yarn", ["version", " --new-version", pkgVer], {
-    shell: true,
-    // UGLY HACK https://github.com/yarnpkg/yarn/issues/1228
-    env: { YARN_VERSION_GIT_TAG: "" },
-  });
+  if (gitStatus.length === 0) {
+    console.log("No-op: already up to date");
+  } else {
+    // ExifTool never has a patch version
+    const pkgVer = version + ".0-pre";
+    console.log("Updating package.json to version " + pkgVer);
+    spawnSync("npm", ["version", "--no-git-tag-version", pkgVer], {
+      shell: true,
+    });
+  }
 }
 
 run();
