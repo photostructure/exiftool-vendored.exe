@@ -17,7 +17,7 @@ jobs:
       
       - name: Configure git line endings
         run: |
-          git config core.autocrlf input
+          git config core.autocrlf false
           git config core.eol lf
       
       - uses: actions/setup-node@v4
@@ -32,24 +32,23 @@ jobs:
         id: update
         shell: bash
         run: |
+          # Get the current version before update
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
           # Run update and capture if changes were made
           npm run update-exiftool
           
-          # Normalize line endings to avoid false positives
-          git add --renormalize .
+          # Get the new version after update
+          NEW_VERSION_FULL=$(node -p "require('./package.json').version")
           
-          # Check if there are any changes beyond just line endings
-          git diff --cached --stat
-          
-          # Check if there are any real changes
-          if [ -z "$(git diff --cached --name-only)" ]; then
+          # Check if version changed
+          if [ "$CURRENT_VERSION" = "$NEW_VERSION_FULL" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "No updates available"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
-            # Get the new version from package.json (remove -pre suffix for display)
-            FULL_VERSION=$(node -p "require('./package.json').version")
-            NEW_VERSION=${FULL_VERSION%-pre}
+            # Remove -pre suffix for display
+            NEW_VERSION=${NEW_VERSION_FULL%-pre}
             echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "Updates available, new version: $NEW_VERSION"
           fi
