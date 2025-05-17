@@ -1,4 +1,47 @@
+# Enforce LF line endings for all text files to match upstream ExifTool
+* text=auto eol=lf
+
+# Strawberry Perl on Windows:
+
+#   1. Prefers CRLF for Windows compatibility - By default, it adds a :crlf
+#      layer to file handles
+#   2. Automatically converts line endings:
+#     - When reading: CRLF → LF (internally)
+#     - When writing: LF → CRLF (to files)
+#   3. Flexible input handling - Can read both CRLF and LF line endings
+#   4. Always writes CRLF unless you explicitly use binary mode
+
+#   However, for this project, we're using LF line endings because:
+
+#   1. The upstream ExifTool repository uses LF
+#   2. Git repositories typically standardize on LF
+#   3. The Perl scripts will work correctly with LF (Strawberry Perl handles
+#      them fine)
+#   4. It avoids the constant line ending conversion warnings
+
+# Binary files (no line ending conversion)
 *.exe binary
 *.dll binary
-*.zip filter=lfs diff=lfs merge=lfs -text
+*.zip binary
+*.jpg binary
+*.png binary
+*.gif binary
+*.ico binary
+
+# Force LF for all text files
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
 *.sh text eol=lf
+*.txt text eol=lf
+
+# ExifTool Perl files - enforce LF to match upstream
+*.pm text eol=lf
+*.pl text eol=lf
+*.pod text eol=lf
+
+# Git config files
+.gitignore text eol=lf
+.gitattributes text eol=lf
