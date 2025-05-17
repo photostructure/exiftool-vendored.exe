@@ -8,7 +8,6 @@ snyk-linux
 
 node_modules/
 yarn.lock
-package-lock.json
 
 bin/exiftool_files/lib/Image/ExifTool.pm.orig
 
