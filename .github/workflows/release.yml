@@ -49,11 +49,10 @@ jobs:
           git config user.name "${{ secrets.GIT_USER_NAME }}"
           git config user.email "${{ secrets.GIT_USER_EMAIL }}"
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Release
-        run: npm run release -- --ci ${{ github.event.inputs.version }}
+        # Note: we're using npx to avoid installing release-it via `npm ci`, so
+        # we can release on linux (even though this is a windows-only package)
+        run: npx -y release-it --ci ${{ github.event.inputs.version }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

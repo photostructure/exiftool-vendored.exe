@@ -4,7 +4,8 @@
       "Bash(mkdir:*)",
       "Bash(test:*)",
       "Bash(find:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "WebFetch(domain:docs.github.com)"
     ],
     "deny": []
   }
