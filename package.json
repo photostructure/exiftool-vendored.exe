@@ -27,8 +27,7 @@
   "scripts": {
     "prettier": "prettier --write *.js test/*.js",
     "test": "mocha",
-    "preupdate": "ncu --upgrade --install always",
-    "update": "node update.js"
+    "update": "node update-exiftool.js"
   },
   "release-it": {
     "hooks": {
@@ -44,7 +43,6 @@
   "devDependencies": {
     "axios": "^1.8.4",
     "mocha": "^11.1.0",
-    "npm-check-updates": "^17.1.16",
     "prettier": "^3.5.3",
     "release-it": "^18.1.2",
     "unzipper": "^0.12.3",
