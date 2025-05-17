@@ -25,6 +25,7 @@ jobs:
       
       - name: Update ExifTool
         id: update
+        shell: bash
         run: |
           # Run update and capture if changes were made
           npm run update-exiftool
