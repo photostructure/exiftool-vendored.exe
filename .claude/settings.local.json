@@ -5,8 +5,11 @@
       "Bash(test:*)",
       "Bash(find:*)",
       "Bash(npm install)",
-      "WebFetch(domain:docs.github.com)"
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(python3:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": false
 }
