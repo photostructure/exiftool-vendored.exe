@@ -27,7 +27,7 @@
   "scripts": {
     "prettier": "prettier --write *.js test/*.js",
     "test": "mocha",
-    "update-exiftool": "node update-exiftool.js",
+    "update:exiftool": "node update-exiftool.js",
     "release": "release-it"
   },
   "release-it": {

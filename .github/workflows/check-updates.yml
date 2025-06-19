@@ -36,7 +36,7 @@ jobs:
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           
           # Run update and capture if changes were made
-          npm run update-exiftool
+          npm run update:exiftool
           
           # Get the new version after update
           NEW_VERSION_FULL=$(node -p "require('./package.json').version")
