@@ -18,8 +18,32 @@ const VersionRE = /\b([\d\.]{4,})\b/;
 
 const asyncPipeline = promisify(pipeline);
 
+async function fetchWithRetry(url, options = {}) {
+  const maxRetries = 3;
+  const timeout = 30000; // 30 seconds
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      console.log(`Fetch attempt ${i + 1} failed:`, error.message);
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1))); // Exponential backoff
+    }
+  }
+}
+
 async function fetchLatestEnclosure() {
-  const response = await fetch("https://exiftool.org/rss.xml");
+  const response = await fetchWithRetry("https://exiftool.org/rss.xml");
   const xmlData = await response.text();
   const parser = new xml2js.Parser();
   const xmlDoc = await parser.parseStringPromise(xmlData);
@@ -40,10 +64,10 @@ async function fetchLatestEnclosure() {
 }
 
 async function fetchLatestSHA256(basename) {
-  const response = await fetch("https://exiftool.org/checksums.txt");
+  const response = await fetchWithRetry("https://exiftool.org/checksums.txt");
   const text = await response.text();
   for (const line of text.split("\n")) {
-    if (line.startsWith("SHA256") && line.includes(basename)) {
+    if (line.startsWith("SHA2-256") && line.includes(basename)) {
       const sha256 = /\b([0-9a-f]{64})\b/.exec(line)?.[1];
       if (sha256 != null) return sha256;
       else
@@ -95,7 +119,7 @@ async function wget(url, basename, dir, sha256) {
   }
   await rm(out, { force: true });
   console.log("Fetching ", { url, out });
-  const response = await fetch(url);
+  const response = await fetchWithRetry(url);
   if (response.body == null) {
     throw new Error("Response body from fetch(" + url + ") is null");
   }
@@ -157,9 +181,21 @@ async function run() {
     join(__dirname, "bin", "exiftool.exe"),
   );
 
-  const version = spawnSync(join(__dirname, "bin", "exiftool.exe"), ["-ver"])
-    .stdout.toString()
-    .trim();
+  let version;
+  if (process.platform === "win32") {
+    const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), ["-ver"]);
+    if (versionResult.error) {
+      throw new Error("Failed to get ExifTool version: " + versionResult.error.message);
+    }
+    version = versionResult.stdout.toString().trim();
+  } else {
+    // On non-Windows platforms, extract version from filename
+    const versionMatch = basename.match(/exiftool-(\d+\.\d+)_/);
+    if (!versionMatch) {
+      throw new Error("Could not extract version from filename: " + basename);
+    }
+    version = versionMatch[1];
+  }
 
   // Check if there are any pending updates
   const gitStatus = spawnSync("git", ["status", "--porcelain=v1"])
@@ -172,6 +208,7 @@ async function run() {
     // ExifTool never has a patch version
     const pkgVer = version + ".0-pre";
     console.log("Updating package.json to version " + pkgVer);
+    // Note: shell: true is required on Windows for npm command to work properly
     spawnSync("npm", ["version", "--no-git-tag-version", pkgVer], {
       shell: true,
     });
