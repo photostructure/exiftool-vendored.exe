@@ -11,36 +11,13 @@ const { promisify } = require("node:util");
 
 const xml2js = require("xml2js");
 const unzipper = require("unzipper");
+const { fetchWithRetry } = require("./lib/version-utils");
 
 // Currently is "12.88", but "13.1" is valid.
 
 const VersionRE = /\b([\d\.]{4,})\b/;
 
 const asyncPipeline = promisify(pipeline);
-
-async function fetchWithRetry(url, options = {}) {
-  const maxRetries = 3;
-  const timeout = 30000; // 30 seconds
-  
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      console.log(`Fetch attempt ${i + 1} failed:`, error.message);
-      if (i === maxRetries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1))); // Exponential backoff
-    }
-  }
-}
 
 async function fetchLatestEnclosure() {
   const response = await fetchWithRetry("https://exiftool.org/rss.xml");

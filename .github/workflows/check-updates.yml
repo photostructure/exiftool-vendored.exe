@@ -28,55 +28,68 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Check for updates
+        id: check
+        run: |
+          # Use our simplified version check script
+          if node check-version.js; then
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+          else
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "update_needed=true" >> $GITHUB_OUTPUT
+              # Get latest version for PR details
+              LATEST_VERSION=$(node -e "
+                const { getLatestExifToolVersion } = require('./lib/version-utils');
+                getLatestExifToolVersion().then(console.log).catch(process.exit);
+              ")
+              echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+            else
+              exit 1
+            fi
+          fi
+      
       - name: Update ExifTool
         id: update
+        if: steps.check.outputs.update_needed == 'true'
         shell: bash
         run: |
-          # Get the current version before update
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          
-          # Run update and capture if changes were made
+          # Run update script
           npm run update:exiftool
           
           # Get the new version after update
           NEW_VERSION_FULL=$(node -p "require('./package.json').version")
           
-          # Check if version changed
-          if [ "$CURRENT_VERSION" = "$NEW_VERSION_FULL" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "No updates available"
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            # Remove -pre suffix for display
-            NEW_VERSION=${NEW_VERSION_FULL%-pre}
-            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "Updates available, new version: $NEW_VERSION"
-            
-            # Normalize line endings to ensure clean PR
-            echo "Normalizing line endings..."
-            git add --renormalize .
-          fi
+          echo "changed=true" >> $GITHUB_OUTPUT
+          # Remove -pre suffix for display
+          NEW_VERSION=${NEW_VERSION_FULL%-pre}
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Updated to version: $NEW_VERSION"
+          
+          # Normalize line endings to ensure clean PR
+          echo "Normalizing line endings..."
+          git add --renormalize .
       
       - name: Run tests
-        if: steps.update.outputs.changed == 'true'
+        if: steps.check.outputs.update_needed == 'true'
         run: npm test
       
       - name: Create Pull Request
-        if: steps.update.outputs.changed == 'true'
+        if: steps.check.outputs.update_needed == 'true'
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           sign-commits: true
-          commit-message: "chore(ExifTool): v${{ steps.update.outputs.new_version }}"
-          title: "Update ExifTool to v${{ steps.update.outputs.new_version }}"
+          commit-message: "chore(ExifTool): v${{ steps.check.outputs.latest_version }}"
+          title: "Update ExifTool to v${{ steps.check.outputs.latest_version }}"
           body: |
-            Updates ExifTool to v${{ steps.update.outputs.new_version }}.
+            Updates ExifTool to v${{ steps.check.outputs.latest_version }}.
             
             This is an automated update created by the check-updates workflow.
             
             ## Changes
             - Updated ExifTool binary to latest version
-            - Package version updated to ${{ steps.update.outputs.new_version }}-pre (will be finalized during release)
+            - Package version updated to ${{ steps.check.outputs.latest_version }}-pre (will be finalized during release)
             
             ## Testing
             - ✅ Tests passed successfully
@@ -87,7 +100,7 @@ jobs:
             2. Run the "Release" workflow to publish to npm
             
             Please review the changes and merge if everything looks good.
-          branch: update-exiftool-${{ steps.update.outputs.new_version }}
+          branch: update-exiftool-${{ steps.check.outputs.latest_version }}
           delete-branch: true
           labels: |
             dependencies
