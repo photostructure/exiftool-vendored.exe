@@ -30,24 +30,25 @@ jobs:
       
       - name: Check for updates
         id: check
+        shell: pwsh
         run: |
           # Use our simplified version check script
-          if node check-version.js; then
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-          else
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -eq 1 ]; then
-              echo "update_needed=true" >> $GITHUB_OUTPUT
-              # Get latest version for PR details
-              LATEST_VERSION=$(node -e "
-                const { getLatestExifToolVersion } = require('./lib/version-utils');
-                getLatestExifToolVersion().then(console.log).catch(process.exit);
-              ")
-              echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
-            else
-              exit 1
-            fi
-          fi
+          node check-version.js
+          $exitCode = $LASTEXITCODE
+          
+          if ($exitCode -eq 0) {
+            echo "update_needed=false" >> $env:GITHUB_OUTPUT
+          } elseif ($exitCode -eq 1) {
+            echo "update_needed=true" >> $env:GITHUB_OUTPUT
+            # Get latest version for PR details
+            $latestVersion = node -e "
+              const { getLatestExifToolVersion } = require('./lib/version-utils');
+              getLatestExifToolVersion().then(console.log).catch(process.exit);
+            "
+            echo "latest_version=$latestVersion" >> $env:GITHUB_OUTPUT
+          } else {
+            exit 1
+          }
       
       - name: Update ExifTool
         id: update
