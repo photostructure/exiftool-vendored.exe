@@ -6,8 +6,7 @@ const { createHash } = require("node:crypto");
 const { createWriteStream, createReadStream } = require("node:fs");
 const { mkdir, rm, rename, stat } = require("node:fs/promises");
 const { join } = require("node:path");
-const { pipeline } = require("node:stream");
-const { promisify } = require("node:util");
+const { pipeline } = require("node:stream/promises");
 
 const xml2js = require("xml2js");
 const unzipper = require("unzipper");
@@ -17,7 +16,6 @@ const { fetchWithRetry } = require("./lib/version-utils");
 
 const VersionRE = /\b([\d\.]{4,})\b/;
 
-const asyncPipeline = promisify(pipeline);
 
 async function fetchLatestEnclosure() {
   const response = await fetchWithRetry("https://exiftool.org/rss.xml");
@@ -100,7 +98,7 @@ async function wget(url, basename, dir, sha256) {
   if (response.body == null) {
     throw new Error("Response body from fetch(" + url + ") is null");
   }
-  await asyncPipeline(response.body, createWriteStream(out));
+  await pipeline(response.body, createWriteStream(out));
   const actualSha256 = await computeSHA256(out);
   console.log("SHA256:", { expected: sha256, actual: actualSha256 });
   if (actualSha256 !== sha256) {
@@ -141,7 +139,7 @@ async function run() {
     maxRetries: 5,
     retryDelay: 1000,
   });
-  await asyncPipeline(
+  await pipeline(
     createReadStream(zipPath),
     unzipper.Extract({ path: dir }),
   );
