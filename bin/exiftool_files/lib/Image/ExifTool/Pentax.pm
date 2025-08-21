@@ -59,7 +59,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 use Image::ExifTool::HP;
 
-$VERSION = '3.53';
+$VERSION = '3.55';
 
 sub CryptShutterCount($$);
 sub PrintFilter($$$);
@@ -751,6 +751,11 @@ my @k3iiiAF = qw(
     C1 E1 G1 I1 K1 C3 E3 G3 I3 K3 C5 E5 G5
     I5 K5 C7 E7 G7 I7 K7 C9 E9 G9 I9 K9 A5 M5 B3
     L3 B5 L5 B7 L7 B1 L1 B9 L9 A3 M3 A7 M7
+    D1 F1 H1 J1 D3 F3 H3 J3 D5 F5 H5 J5 D7
+    F7 H7 J7 D9 F9 H9 J9 C2 E2 G2 I2 K2 C4
+    E4 G4 I4 K4 C6 E6 G6 I6 K6 C8 E8 G8 I8
+    K8 B2 L2 B4 L4 B6 L6 B8 L8 A1 M1 A2 M2
+    A4 M4 A6 M6 A8 M8 A9 M9
 );
 
 # decoding for Pentax Firmware ID tags - PH
@@ -1972,6 +1977,8 @@ my %binaryDataAttrs = (
             '18 3' => 'Auto Program (MTF)', #PH (NC)
             '18 22' => 'Auto Program (Shallow DOF)', #PH (NC)
             '20 22' => 'Blur Control', #PH (Q)
+            '24 0' => 'Aperture Priority (Adv.Hyp)', #KG
+            '25 0' => 'Manual Exposure (Adv.Hyp)', #KG
             '26 0' => 'Shutter and Aperture Priority (TAv)', #PH (K-3III)
             '249 0' => 'Movie (TAv)', #31
             '250 0' => 'Movie (TAv, Auto Aperture)', #31
@@ -1993,10 +2000,13 @@ my %binaryDataAttrs = (
         Count => 4,
         PrintConv => [{
             0 => 'Single-frame', # (also Interval Shooting for K-01 - PH)
-            1 => 'Continuous', # (K-5 Hi)
-            2 => 'Continuous (Lo)', #PH (K-5)
+            1 => 'Continuous',   #KG  *ist D, *ist Ds, *ist DS2, K110D, K10D, K100D, K100D Super, K20D, Ricoh GR III / GR IIIx
+                                 #KG  Hi:   K200D, K-x, K-7, K-r, K-5, K-01, K-5 II, K-5 IIs, K-30, K-500, K-50, K-S1, K-S2, K-70
+                                 #KG  High: K-3, K-3 II, K-1, K-1 II, KP, K-3 III, K-3 III Mono
+            2 => 'Continuous (Lo)',     #KG all models listed under 'Hi'
             3 => 'Burst', #PH (K20D)
-            4 => 'Continuous (Medium)', #PH (K-3)
+            4 => 'Continuous (Medium)', #KG all models listed under 'High'
+            5 => 'Continuous (Low)',    #KG all models listed under 'High'
             255 => 'Video', #PH (K-x)
         },{
             0 => 'No Timer',
@@ -3004,7 +3014,7 @@ my %binaryDataAttrs = (
     }],
     0x022b => [{
         Name => 'LevelInfoK3III',
-        Condition => '$$self{Model} eq "PENTAX K-3 Mark III"',
+        Condition => '$$self{Model} =~ /K-3 Mark III/',
         SubDirectory => { TagTable => 'Image::ExifTool::Pentax::LevelInfoK3III' },
     },{ #PH (K-5)
         Name => 'LevelInfo',
@@ -3112,6 +3122,11 @@ my %binaryDataAttrs = (
     # 0x0406 - undef[4116] (K-5)
     # 0x0407 - undef[3072] (Q DNG)
     # 0x0408 - undef[1024] (Q DNG)
+    0x040b => {
+        Name => 'FaceInfoK3III',
+        # undef[1640] (actually int32u[410], K3III)
+        SubDirectory => { TagTable => 'Image::ExifTool::Pentax::FaceInfoK3III' },
+    },
     0x040c => {
         Name => 'AFInfoK3III',
         SubDirectory => { TagTable => 'Image::ExifTool::Pentax::AFInfoK3III' },
@@ -5056,7 +5071,7 @@ my %binaryDataAttrs = (
     },
     0x14 => {
         Name => 'AFPointValues',
-        Condition => '$$self{Model} eq "PENTAX K-3 Mark III"', # any other models?
+        Condition => '$$self{Model} =~ /K-3 Mark III/', #KG
         Format => 'int16uRev[69]',
         Unknown => 1,
         Notes => 'some unknown values related to each AFPoint',
@@ -5067,15 +5082,18 @@ my %binaryDataAttrs = (
         ValueConv => 'my @a=split " ",$val;$_>32767 and $_-=65536 foreach @a;join " ",@a',
         PrintConv => \&AFPointValuesK3III,
     },
-    0x12a => { # byte has a value of 2 if corresponding AF point is selected
+    0x12a => {
         Name => 'AFPointsSelected', # (should probably be "AFPointSelected", but the bitmask allows multiple points)
-        Condition => '$$self{Model} eq "PENTAX K-3 Mark III"', # any other models?
+        Condition => '$$self{Model} =~ /K-3 Mark III/',
         Notes => q{
             K-3III only. 41 selectable AF points from a total of 101 available in a 13x9
-            grid. Columns are labelled A-M and rows are 1-9. The center point is G5
+            grid. Columns are labelled A-M and rows are 1-9. The center point is G5. The
+            exact meaning of this tag is not fully understood, although it does seem
+            related to the selected AF point
         },
-        Format => 'int8u[41]',
-        PrintConv => 'Image::ExifTool::Pentax::AFPointNamesK3III($val,$self,2)',
+        Format => 'int8u[101]',
+        # value of 1 means "selected point", and 2 means "center of selected area"
+        PrintConv => \&AFPointNamesK3III,
     },
 #
 # (maybe not coincidentally, there are 60 unknown bytes
@@ -5084,15 +5102,15 @@ my %binaryDataAttrs = (
     0x18f => { # byte has a value of 1 if corresponding AF point is ... in focus maybe?
         # usually the same points as AFPointsSelected above, but not always
         Name => 'AFPointsUnknown',
-        Condition => '$$self{Model} eq "PENTAX K-3 Mark III"', # any other models?
+        Condition => '$$self{Model} =~ /K-3 Mark III/', #KG
         Unknown => 1,
-        Format => 'int8u[41]',
+        Format => 'int8u[101]',
         PrintConv => \&AFPointNamesK3III,
     },
     0x1fa => {
         Name => 'LiveView',
         Notes => 'decoded only for the K-3 III',
-        Condition => '$$self{Model} eq "PENTAX K-3 Mark III"', # and other models?
+        Condition => '$$self{Model} =~ /K-3 Mark III/', #KG
         PrintConv => { 0 => 'Off', 1 => 'On' },
     },
     0x1fd => {
@@ -5100,6 +5118,54 @@ my %binaryDataAttrs = (
         Notes => 'decoded only for the K-3 II',
         Condition => '$$self{Model} eq "PENTAX K-3 II"',
         PrintConv => { 0 => 'Off', 1 => 'Short', 2 => 'Medium', 3 => 'Long' },
+    },
+    0x021f => { #KG
+          Name => 'FirstFrameActionInAFC',
+          Condition => '$$self{Model} =~ /K-3 Mark III/',
+          PrintConv => {
+              '0'   => 'Auto',
+              '1'   => 'Release Priority',
+              '2'   => 'Focus Priority',
+              # there is at least another value '3' but I couldn't figure out the
+              # meaning. However, this occurs for a few AF-S captures, so it has
+              # no real practical meaning.
+          },
+    },
+    0x0220 => { #KG
+          Name => 'ActionInAFCCont',
+          Condition => '$$self{Model} =~ /K-3 Mark III/',
+          PrintConv => {
+              '0'   => 'Auto',
+              '1'   => 'Focus Priority',
+              '2'   => 'FPS Priority',
+          },
+    },
+    545 => { #KG
+          Name => 'AFCHold',
+          Condition => '$$self{Model} =~ /K-3 Mark III/',
+          Mask => 0x03,
+          PrintConv => { 0 => 'Low', 1 => 'Medium', 2 => 'High', 3 => 'Off' },
+    },
+    545.1 => { #KG
+        Name => 'AFCSensitivity',
+        Condition => '$$self{Model} =~ /K-3 Mark III/',
+        Mask => 0x0c,
+        PrintConv => '5 - $val',
+        PrintConvInv => '5 - $val',
+    },
+    545.2 => { #KG
+        Name => 'AFCPointTracking',
+        Condition => '$$self{Model} =~ /K-3 Mark III/',
+        Mask => 0x70,
+        PrintConv => { 0 => 'Type 1', 1 => 'Type 2', 2 => 'Type 3' },
+    },
+    0x0960 => { #KG
+          Name => 'SubjectRecognition',
+          Condition => '$$self{Model} =~ /K-3 Mark III/',
+          PrintConv => {
+              0 => 'Off',
+              1 => 'On',
+          },
     },
 );
 
@@ -5705,6 +5771,86 @@ my %binaryDataAttrs = (
     },
 );
 
+%Image::ExifTool::Pentax::FaceInfoK3III = (
+    %binaryDataAttrs,
+    GROUPS => { 0 => 'MakerNotes', 2 => 'Image' },
+    FORMAT => 'int32u',
+    DATAMEMBER => [ 6, 8 ],
+    0.1 => {
+        Name => 'FaceInfoK3III',
+        Format => 'int32u[$size/4]',
+        Notes => q{
+            entire FaceInfoK3III structure. Provides access to raw numerical values and
+            facilitates the writing of the whole structure
+        },
+        Unknown => 1,
+    },
+      0 => { Name => 'FaceImageSize', Format => 'int32u[2]' },
+      2 => { Name => 'CAFArea', Format => 'int32u[4]', Notes => 'top, left, width, height' },
+      6 => { Name => 'FacesDetectedA', RawConv => '$$self{FacesA} = $val' },
+      8 => { Name => 'FacesDetectedB', RawConv => '$$self{FacesA} = $val' },
+     10 => { Name => 'Face1AArea', Condition => '$$self{FacesA} >= 1', Format => 'int32u[4]' },
+     14 => { Name => 'Face1AEye1', Condition => '$$self{FacesA} >= 1', Format => 'int32u[4]' },
+     18 => { Name => 'Face1AEye2', Condition => '$$self{FacesA} >= 1', Format => 'int32u[4]' },
+     30 => { Name => 'Face2AArea', Condition => '$$self{FacesA} >= 2', Format => 'int32u[4]' },
+     34 => { Name => 'Face2AEye1', Condition => '$$self{FacesA} >= 2', Format => 'int32u[4]' },
+     38 => { Name => 'Face2AEye2', Condition => '$$self{FacesA} >= 2', Format => 'int32u[4]' },
+     50 => { Name => 'Face3AArea', Condition => '$$self{FacesA} >= 3', Format => 'int32u[4]' },
+     54 => { Name => 'Face3AEye1', Condition => '$$self{FacesA} >= 3', Format => 'int32u[4]' },
+     58 => { Name => 'Face3AEye2', Condition => '$$self{FacesA} >= 3', Format => 'int32u[4]' },
+     70 => { Name => 'Face4AArea', Condition => '$$self{FacesA} >= 4', Format => 'int32u[4]' },
+     74 => { Name => 'Face4AEye1', Condition => '$$self{FacesA} >= 4', Format => 'int32u[4]' },
+     78 => { Name => 'Face4AEye2', Condition => '$$self{FacesA} >= 4', Format => 'int32u[4]' },
+     90 => { Name => 'Face5AArea', Condition => '$$self{FacesA} >= 5', Format => 'int32u[4]' },
+     94 => { Name => 'Face5AEye1', Condition => '$$self{FacesA} >= 5', Format => 'int32u[4]' },
+     98 => { Name => 'Face5AEye2', Condition => '$$self{FacesA} >= 5', Format => 'int32u[4]' },
+    110 => { Name => 'Face6AArea', Condition => '$$self{FacesA} >= 6', Format => 'int32u[4]' },
+    114 => { Name => 'Face6AEye1', Condition => '$$self{FacesA} >= 6', Format => 'int32u[4]' },
+    118 => { Name => 'Face6AEye2', Condition => '$$self{FacesA} >= 6', Format => 'int32u[4]' },
+    130 => { Name => 'Face7AArea', Condition => '$$self{FacesA} >= 7', Format => 'int32u[4]' },
+    134 => { Name => 'Face7AEye1', Condition => '$$self{FacesA} >= 7', Format => 'int32u[4]' },
+    138 => { Name => 'Face7AEye2', Condition => '$$self{FacesA} >= 7', Format => 'int32u[4]' },
+    150 => { Name => 'Face8AArea', Condition => '$$self{FacesA} >= 8', Format => 'int32u[4]' },
+    154 => { Name => 'Face8AEye1', Condition => '$$self{FacesA} >= 8', Format => 'int32u[4]' },
+    158 => { Name => 'Face8AEye2', Condition => '$$self{FacesA} >= 8', Format => 'int32u[4]' },
+    170 => { Name => 'Face9AArea', Condition => '$$self{FacesA} >= 9', Format => 'int32u[4]' },
+    174 => { Name => 'Face9AEye1', Condition => '$$self{FacesA} >= 9', Format => 'int32u[4]' },
+    178 => { Name => 'Face9AEye2', Condition => '$$self{FacesA} >= 9', Format => 'int32u[4]' },
+    190 => { Name => 'Face10AArea',Condition => '$$self{FacesA} >= 10', Format => 'int32u[4]' },
+    194 => { Name => 'Face10AEye1',Condition => '$$self{FacesA} >= 10', Format => 'int32u[4]' },
+    198 => { Name => 'Face10AEye2',Condition => '$$self{FacesA} >= 10', Format => 'int32u[4]' },
+    210 => { Name => 'Face1BArea', Condition => '$$self{FacesA} >= 1', Format => 'int32u[4]' },
+    214 => { Name => 'Face1BEye1', Condition => '$$self{FacesA} >= 1', Format => 'int32u[4]' },
+    218 => { Name => 'Face1BEye2', Condition => '$$self{FacesA} >= 1', Format => 'int32u[4]' },
+    230 => { Name => 'Face2BArea', Condition => '$$self{FacesA} >= 2', Format => 'int32u[4]' },
+    234 => { Name => 'Face2BEye1', Condition => '$$self{FacesA} >= 2', Format => 'int32u[4]' },
+    238 => { Name => 'Face2BEye2', Condition => '$$self{FacesA} >= 2', Format => 'int32u[4]' },
+    250 => { Name => 'Face3BArea', Condition => '$$self{FacesA} >= 3', Format => 'int32u[4]' },
+    254 => { Name => 'Face3BEye1', Condition => '$$self{FacesA} >= 3', Format => 'int32u[4]' },
+    258 => { Name => 'Face3BEye2', Condition => '$$self{FacesA} >= 3', Format => 'int32u[4]' },
+    270 => { Name => 'Face4BArea', Condition => '$$self{FacesA} >= 4', Format => 'int32u[4]' },
+    274 => { Name => 'Face4BEye1', Condition => '$$self{FacesA} >= 4', Format => 'int32u[4]' },
+    278 => { Name => 'Face4BEye2', Condition => '$$self{FacesA} >= 4', Format => 'int32u[4]' },
+    290 => { Name => 'Face5BArea', Condition => '$$self{FacesA} >= 5', Format => 'int32u[4]' },
+    294 => { Name => 'Face5BEye1', Condition => '$$self{FacesA} >= 5', Format => 'int32u[4]' },
+    298 => { Name => 'Face5BEye2', Condition => '$$self{FacesA} >= 5', Format => 'int32u[4]' },
+    310 => { Name => 'Face6BArea', Condition => '$$self{FacesA} >= 6', Format => 'int32u[4]' },
+    314 => { Name => 'Face6BEye1', Condition => '$$self{FacesA} >= 6', Format => 'int32u[4]' },
+    318 => { Name => 'Face6BEye2', Condition => '$$self{FacesA} >= 6', Format => 'int32u[4]' },
+    330 => { Name => 'Face7BArea', Condition => '$$self{FacesA} >= 7', Format => 'int32u[4]' },
+    334 => { Name => 'Face7BEye1', Condition => '$$self{FacesA} >= 7', Format => 'int32u[4]' },
+    338 => { Name => 'Face7BEye2', Condition => '$$self{FacesA} >= 7', Format => 'int32u[4]' },
+    350 => { Name => 'Face8BArea', Condition => '$$self{FacesA} >= 8', Format => 'int32u[4]' },
+    354 => { Name => 'Face8BEye1', Condition => '$$self{FacesA} >= 8', Format => 'int32u[4]' },
+    358 => { Name => 'Face8BEye2', Condition => '$$self{FacesA} >= 8', Format => 'int32u[4]' },
+    370 => { Name => 'Face9BArea', Condition => '$$self{FacesA} >= 9', Format => 'int32u[4]' },
+    374 => { Name => 'Face9BEye1', Condition => '$$self{FacesA} >= 9', Format => 'int32u[4]' },
+    378 => { Name => 'Face9BEye2', Condition => '$$self{FacesA} >= 9', Format => 'int32u[4]' },
+    390 => { Name => 'Face10BArea',Condition => '$$self{FacesA} >= 10', Format => 'int32u[4]' },
+    394 => { Name => 'Face10BEye1',Condition => '$$self{FacesA} >= 10', Format => 'int32u[4]' },
+    398 => { Name => 'Face10BEye2',Condition => '$$self{FacesA} >= 10', Format => 'int32u[4]' },
+);
+
 %Image::ExifTool::Pentax::AFInfoK3III = (
     %binaryDataAttrs,
     GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
@@ -5929,6 +6075,14 @@ my %binaryDataAttrs = (
         binary-data block in images from models such as the K-01, K-3, K-5, K-50 and
         K-500.  It is currently not known where the corresponding temperature
         sensors are located in the camera.
+    },
+    0x0a => { #KG
+          Name => 'ShotNumber',
+          Condition => '$$self{Model} =~ /K-3 Mark III/',
+          # The exact same method to detect this tag with a similar set of files
+          # does not reveal anything for K-1. Is this only available for K-3-III ?
+          # Internal representation starts at 0 for the 1st shot
+          ValueConv => '$val+1',
     },
     # (it would be nice to know where these temperature sensors are located,
     #  but since according to the manual the Slow Shutter Speed NR Auto mode
