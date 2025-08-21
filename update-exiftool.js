@@ -9,7 +9,7 @@ const { join } = require("node:path");
 const { pipeline } = require("node:stream/promises");
 
 const xml2js = require("xml2js");
-const unzipper = require("unzipper");
+const extractZip = require("extract-zip");
 const { fetchWithRetry } = require("./lib/version-utils");
 
 // Currently is "12.88", but "13.1" is valid.
@@ -139,10 +139,7 @@ async function run() {
     maxRetries: 5,
     retryDelay: 1000,
   });
-  await pipeline(
-    createReadStream(zipPath),
-    unzipper.Extract({ path: dir }),
-  );
+  await extractZip(zipPath, { dir });
   const destDir = join(__dirname, "bin");
   await rm(destDir, {
     recursive: true,

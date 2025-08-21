@@ -11,7 +11,10 @@
       "Bash(gh pr view:*)",
       "Bash(gh pr diff:*)",
       "Bash(node:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(gh run view:*)",
+      "Bash(npm test)",
+      "WebSearch"
     ],
     "deny": []
   },
