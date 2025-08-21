@@ -695,12 +695,11 @@ TAG: foreach $tagInfo (@matchingTags) {
             my $src = GetTagTable($$table{SRC_TABLE});
             $writeProc = $$src{WRITE_PROC} unless $writeProc;
         }
-        {
+        if ($writeProc) {
             # make sure module is loaded if the writeProc is a string
             unless (ref $writeProc) {
                 my $module = $writeProc;
-                $module =~ s/::\w+$//;
-                eval "require $module";
+                $module =~ s/::\w+$// and eval "require $module";
             }
             no strict 'refs';
             next unless $writeProc and &$writeProc();
@@ -3203,7 +3202,7 @@ sub InsertTagValues($$;$$$$)
     my ($docNum, $tag);
 
     if ($docGrp) {
-        $docNum = $docGrp =~ /(\d+)$/ ? $1 : 0;
+        $docNum = $docGrp =~ /(\d+(-\d+)*)$/ ? $1 : 0;
     } else {
         undef $cache;   # no cache if no document groups
     }
@@ -3271,25 +3270,25 @@ sub InsertTagValues($$;$$$$)
                 # (similar to code in BuildCompositeTags(), but this is case-insensitive)
                 my $cacheTag = $$cache{$lcTag};
                 unless ($cacheTag) {
-                    $cacheTag = $$cache{$lcTag} = [ ];
+                    $cacheTag = $$cache{$lcTag} = { };
                     # find all matching keys, organize into groups, and store in cache
                     my $ex = $$self{TAG_EXTRA};
                     my @matches = grep /^$tag(\s|$)/i, @$foundTags;
                     @matches = $self->GroupMatches($group, \@matches) if defined $group;
                     foreach (@matches) {
                         my $doc = $$ex{$_}{G3} || 0;
-                        if (defined $$cacheTag[$doc]) {
-                            next unless $$cacheTag[$doc] =~ / \((\d+)\)$/;
+                        if (defined $$cacheTag{$doc}) {
+                            next unless $$cacheTag{$doc} =~ / \((\d+)\)$/;
                             my $cur = $1;
                             # keep the most recently extracted tag
                             next if / \((\d+)\)$/ and $1 < $cur;
                         }
-                        $$cacheTag[$doc] = $_;
+                        $$cacheTag{$doc} = $_;
                     }
                 }
-                my $doc = $lcTag =~ /\b(main|doc(\d+)):/ ? ($2 || 0) : $docNum;
-                if ($$cacheTag[$doc]) {
-                    $tag = $$cacheTag[$doc];
+                my $doc = $lcTag =~ /\b(main|doc(\d+(-\d+)*)):/ ? ($2 || 0) : $docNum;
+                if ($$cacheTag{$doc}) {
+                    $tag = $$cacheTag{$doc};
                     $val = $self->GetValue($tag, $type);
                 }
             } else {
@@ -3405,7 +3404,7 @@ sub InsertTagValues($$;$$$$)
             undef $advFmtSelf;
             $didExpr = 1;   # set flag indicating an expression was evaluated
         }
-        unless (defined $val) {
+        unless (defined $val or (ref $opt and $$self{OPTIONS}{UndefTags})) {
             $val = $$self{OPTIONS}{MissingTagValue};
             unless (defined $val) {
                 my $g3 = ($docGrp and $var !~ /\b(main|doc\d+):/i) ? $docGrp . ':' : '';
@@ -5053,6 +5052,7 @@ TryLib: for ($lib=$strptimeLib; ; $lib='') {
                 last;
             }
             if (not $lib) {
+                last unless $$self{OPTIONS}{StrictDate};
                 warn $wrn || "Install POSIX::strptime or Time::Piece for inverse date/time conversions\n";
                 return undef;
             } elsif ($lib eq 'POSIX::strptime') {
