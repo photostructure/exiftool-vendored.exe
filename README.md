@@ -3,7 +3,7 @@
 Provides the win32 distribution of [ExifTool](http://www.sno.phy.queensu.ca/~phil/exiftool/) to [node](https://nodejs.org/en/).
 
 [![npm version](https://img.shields.io/npm/v/exiftool-vendored.exe.svg)](https://www.npmjs.com/package/exiftool-vendored.exe)
-[![Node.js CI](https://github.com/photostructure/exiftool-vendored.exe/actions/workflows/node.js.yml/badge.svg?branch=main)](https://github.com/photostructure/exiftool-vendored.exe/actions/workflows/node.js.yml)
+[![Build & Release](https://github.com/photostructure/exiftool-vendored.exe/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/photostructure/exiftool-vendored.exe/actions/workflows/build.yml)
 
 ## Usage
 

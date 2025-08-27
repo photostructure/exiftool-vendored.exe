@@ -1,22 +1,49 @@
-name: Release
+name: Build & Release
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
         description: "Version type (auto-detects from package.json if not specified)"
         required: false
         type: choice
+        default: "auto"
         options:
-          - ""
+          - auto
           - patch
           - minor
           - major
 
 jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        # macos and linux are tested with exiftool-vendored.pl:
+        os: [windows-latest]
+        # See https://github.com/nodejs/release#release-schedule
+        node-version: [20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3.9.1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm install
+      - run: npm test
+
   release:
     runs-on: ubuntu-latest # < We don't have to use a Windows runner for releases
+    needs: [build]
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     permissions:
+      id-token: write # Required for OIDC
       contents: write
       packages: write
 
@@ -30,8 +57,7 @@ jobs:
           git config core.autocrlf false
           git config core.eol lf
 
-      # setup-node configures auth with registry-url and NODE_AUTH_TOKEN
-      # See: https://github.com/actions/setup-node#usage
+      # setup-node with registry-url is required for OIDC trusted publishing
       - uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3.9.1
         with:
           node-version: 20
@@ -44,10 +70,18 @@ jobs:
           git-user-name: ${{ secrets.GIT_USER_NAME }}
           git-user-email: ${{ secrets.GIT_USER_EMAIL }}
 
+      - name: Update npm to latest
+        run: |
+          echo "Current npm version:"
+          npm --version
+          echo "Updating npm to latest..."
+          npm install -g npm@latest
+          echo "New npm version:"
+          npm --version
+
       - name: Release
         # Note: we're using npx to avoid installing release-it via `npm ci`, so
         # we can release on linux (even though this is a windows-only package)
-        run: npx -y release-it --ci ${{ github.event.inputs.version }}
+        run: npx -y release-it --ci ${{ github.event.inputs.version == 'auto' && '' || github.event.inputs.version }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
