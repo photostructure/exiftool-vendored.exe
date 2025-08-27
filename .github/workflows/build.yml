@@ -8,15 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version type (auto-detects from package.json if not specified)"
+        description: "Version string (auto, patch, minor, major, or specific version like 1.2.3)"
         required: false
-        type: choice
+        type: string
         default: "auto"
-        options:
-          - auto
-          - patch
-          - minor
-          - major
 
 jobs:
   build:
