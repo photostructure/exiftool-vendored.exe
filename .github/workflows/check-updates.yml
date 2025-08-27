@@ -2,7 +2,7 @@ name: Check for ExifTool Updates
 
 on:
   schedule:
-    - cron: '0 6 * * MON' # Run every Monday at 6 AM UTC
+    - cron: "0 6 * * MON" # Run every Monday at 6 AM UTC
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -11,23 +11,23 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    
+
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      
+
       - name: Configure git line endings
         run: |
           git config core.autocrlf false
           git config core.eol lf
-      
+
       - uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610 # v3.9.1
         with:
           node-version: 20
-          cache: 'npm'
-      
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Check for updates
         id: check
         shell: pwsh
@@ -35,7 +35,7 @@ jobs:
           # Use our simplified version check script
           node check-version.js
           $exitCode = $LASTEXITCODE
-          
+
           if ($exitCode -eq 0) {
             echo "update_needed=false" >> $env:GITHUB_OUTPUT
           } elseif ($exitCode -eq 1) {
@@ -49,7 +49,7 @@ jobs:
           } else {
             exit 1
           }
-      
+
       - name: Update ExifTool
         id: update
         if: steps.check.outputs.update_needed == 'true'
@@ -57,24 +57,24 @@ jobs:
         run: |
           # Run update script
           npm run update:exiftool
-          
+
           # Get the new version after update
           NEW_VERSION_FULL=$(node -p "require('./package.json').version")
-          
+
           echo "changed=true" >> $GITHUB_OUTPUT
           # Remove -pre suffix for display
           NEW_VERSION=${NEW_VERSION_FULL%-pre}
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Updated to version: $NEW_VERSION"
-          
+
           # Normalize line endings to ensure clean PR
           echo "Normalizing line endings..."
           git add --renormalize .
-      
+
       - name: Run tests
         if: steps.check.outputs.update_needed == 'true'
         run: npm test
-      
+
       - name: Create Pull Request
         if: steps.check.outputs.update_needed == 'true'
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
@@ -85,21 +85,21 @@ jobs:
           title: "Update ExifTool to v${{ steps.check.outputs.latest_version }}"
           body: |
             Updates ExifTool to v${{ steps.check.outputs.latest_version }}.
-            
+
             This is an automated update created by the check-updates workflow.
-            
+
             ## Changes
             - Updated ExifTool binary to latest version
             - Package version updated to ${{ steps.check.outputs.latest_version }}-pre (will be finalized during release)
-            
+
             ## Testing
             - ✅ Tests passed successfully
-            
+
             ## Next Steps
             After merging this PR:
             1. Go to the Actions tab
             2. Run the "Release" workflow to publish to npm
-            
+
             Please review the changes and merge if everything looks good.
           branch: update-exiftool-${{ steps.check.outputs.latest_version }}
           delete-branch: true

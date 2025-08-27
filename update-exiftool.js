@@ -16,7 +16,6 @@ const { fetchWithRetry } = require("./lib/version-utils");
 
 const VersionRE = /\b([\d\.]{4,})\b/;
 
-
 async function fetchLatestEnclosure() {
   const response = await fetchWithRetry("https://exiftool.org/rss.xml");
   const xmlData = await response.text();
@@ -155,9 +154,13 @@ async function run() {
 
   let version;
   if (process.platform === "win32") {
-    const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), ["-ver"]);
+    const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), [
+      "-ver",
+    ]);
     if (versionResult.error) {
-      throw new Error("Failed to get ExifTool version: " + versionResult.error.message);
+      throw new Error(
+        "Failed to get ExifTool version: " + versionResult.error.message,
+      );
     }
     version = versionResult.stdout.toString().trim();
   } else {
