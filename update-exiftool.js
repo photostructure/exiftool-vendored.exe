@@ -10,7 +10,7 @@ const { pipeline } = require("node:stream/promises");
 
 const xml2js = require("xml2js");
 const extractZip = require("extract-zip");
-const { fetchWithRetry } = require("./lib/version-utils");
+const { fetchWithRetry, checkForUpdate } = require("./lib/version-utils");
 
 // Currently is "12.88", but "13.1" is valid.
 
@@ -108,6 +108,19 @@ async function wget(url, basename, dir, sha256) {
 }
 
 async function run() {
+  // Check if an update is actually needed before downloading anything
+  console.log("Checking if ExifTool update is needed...");
+  const { currentVersion, latestVersion, updateAvailable } = await checkForUpdate();
+  
+  console.log(`Current version: ${currentVersion}`);
+  console.log(`Latest version:  ${latestVersion}`);
+  
+  if (!updateAvailable) {
+    console.log("✅ No-op: already up to date");
+    return;
+  }
+  
+  console.log("📦 Update available, proceeding with download...");
   const enc = await fetchLatestEnclosure();
   const u = new URL(enc.url);
   const basename = u.pathname.split("/").at(-1);
