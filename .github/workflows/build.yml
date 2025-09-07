@@ -8,12 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version type (auto-detects from package.json if not specified)"
-        required: false
+        description: Version bump (choose "patch" to bump a `-pre` prerelease into stable)
+        required: true
         type: choice
-        default: "auto"
+        default: "patch"
         options:
-          - auto
           - patch
           - minor
           - major
@@ -82,6 +81,6 @@ jobs:
         run: npm ci --force # --force ignores the os limitation in package.json
 
       - name: Release
-        run: npm run release -- --ci ${{ github.event.inputs.version == 'auto' && '' || github.event.inputs.version }}
+        run: npm run release -- --ci ${{ github.event.inputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
