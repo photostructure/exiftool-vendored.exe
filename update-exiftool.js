@@ -9,7 +9,7 @@ const { join } = require("node:path");
 const { pipeline } = require("node:stream/promises");
 
 const xml2js = require("xml2js");
-const extractZip = require("extract-zip");
+const { unzip } = require("cross-zip");
 const { fetchWithRetry, checkForUpdate } = require("./lib/version-utils");
 
 // Currently is "12.88", but "13.1" is valid.
@@ -27,7 +27,8 @@ async function fetchLatestEnclosure() {
     const title = item.title[0];
     const version = /\b(\d{2}\.\d+\b)/.exec(title)?.[1];
     enc = item.enclosure?.find(
-      (ea) => ea.$.type === "application/zip" && ea.$.url.endsWith("_64.zip"),
+      (/** @type {{ $: { type: string; url: string; }; }} */ ea) =>
+        ea.$.type === "application/zip" && /_64.zip(?:$|\/)/.test(ea.$.url),
     )?.$;
     if (enc != null) break;
   }
@@ -37,6 +38,9 @@ async function fetchLatestEnclosure() {
   return enc;
 }
 
+/**
+ * @param {string} basename
+ */
 async function fetchLatestSHA256(basename) {
   const response = await fetchWithRetry("https://exiftool.org/checksums.txt");
   const text = await response.text();
@@ -51,6 +55,9 @@ async function fetchLatestSHA256(basename) {
   throw new Error("No SHA256 hash was found for basename: " + basename);
 }
 
+/**
+ * @param {import("fs").PathLike} path
+ */
 function computeSHA256(path) {
   return new Promise((resolve, reject) => {
     const hash = createHash("sha256");
@@ -87,8 +94,12 @@ async function wget(url, basename, dir, sha256) {
       return out;
     }
   } catch (e) {
-    if (e.code !== "ENOENT") {
-      throw e;
+    const err = /** @type {any} */ (e);
+    if (err && err.code === "ENOENT") {
+      // file doesn't exist — that's fine
+    } else {
+      if (err instanceof Error) throw err;
+      throw new Error(String(err));
     }
   }
   await rm(out, { force: true });
@@ -110,20 +121,22 @@ async function wget(url, basename, dir, sha256) {
 async function run() {
   // Check if an update is actually needed before downloading anything
   console.log("Checking if ExifTool update is needed...");
-  const { currentVersion, latestVersion, updateAvailable } = await checkForUpdate();
-  
+  const { currentVersion, latestVersion, updateAvailable } =
+    await checkForUpdate();
+
   console.log(`Current version: ${currentVersion}`);
   console.log(`Latest version:  ${latestVersion}`);
-  
+
   if (!updateAvailable) {
     console.log("✅ No-op: already up to date");
     return;
   }
-  
+
   console.log("📦 Update available, proceeding with download...");
   const enc = await fetchLatestEnclosure();
   const u = new URL(enc.url);
-  const basename = u.pathname.split("/").at(-1);
+  const pathSegments = u.pathname.split("/").filter((s) => s.length > 0);
+  const basename = pathSegments.find((s) => s.endsWith(".zip"));
   if (basename == null) {
     throw new Error("Invalid basename from URL: " + enc.url);
   }
@@ -151,7 +164,14 @@ async function run() {
     maxRetries: 5,
     retryDelay: 1000,
   });
-  await extractZip(zipPath, { dir });
+
+  // Extract zip file using cross-zip (uses unzip on Unix, 7zip on Windows)
+  await new Promise((resolve, reject) => {
+    unzip(zipPath, dir, (err) => {
+      if (err) reject(new Error("Failed to extract zip: " + err.message));
+      else resolve(undefined);
+    });
+  });
   const destDir = join(__dirname, "bin");
   await rm(destDir, {
     recursive: true,
@@ -198,7 +218,7 @@ async function run() {
     console.log("Updating package.json to version " + pkgVer);
     // Note: shell: true is required on Windows for npm command to work properly
     spawnSync("npm", ["version", "--no-git-tag-version", pkgVer], {
-      shell: true,
+      shell: process.platform === "win32",
     });
   }
 }
