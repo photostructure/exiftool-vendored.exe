@@ -14,7 +14,13 @@
       "Bash(curl:*)",
       "Bash(gh run view:*)",
       "Bash(npm test)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(cat:*)",
+      "Bash(unzip:*)",
+      "Bash(chmod:*)",
+      "Bash(npm uninstall:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Read(//home/mrm/src/cross-zip/**)"
     ],
     "deny": []
   },
