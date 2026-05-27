@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '13.58';
+my $version = '13.59';
 
 $^W = 1;    # enable global warnings
 
@@ -2437,7 +2437,8 @@ sub GetImageInfo($$)
             if (defined $tag) {
                 $done{$tag} = 1;
                 $g = $et->GetGroup($tag, $showGroup);
-            } else {
+            }
+            unless ($g) { # ($g could be '' if requesting non-existent tag, and this will sort last)
                 for (;;) {
                     $tag2 = shift @found2;
                     defined $tag2 or $g = '', last;
@@ -4664,6 +4665,7 @@ sub FilenameSPrintf($;$@)
     $part{F} = $part{f} . $part{E};
     ($part{D} = $part{d}) =~ s{/+$}{};
     @part{qw(t g s o)} = @extra;
+    $part{o} =~ s(^.*[/\\])()s if $part{o}; # remove directory if it exists
     my ($filename, $pos) = ('', 0);
     while ($fmt =~ /(%([-+]?)(\d*)([.:]?)(\d*)([lu]?)([dDfFeEtgso]))/g) {
         $filename .= substr($fmt, $pos, pos($fmt) - $pos - length($1));
