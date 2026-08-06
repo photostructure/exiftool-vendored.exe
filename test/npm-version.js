@@ -1,5 +1,7 @@
 const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
 const { requireSupportedNpmVersion } = require("../scripts/check-npm-version");
+const pkg = require("../package.json");
 
 describe("npm version guard", () => {
   it("accepts npm releases that enforce min-release-age", () => {
@@ -26,5 +28,16 @@ describe("npm version guard", () => {
       () => requireSupportedNpmVersion(""),
       /run this check through an npm script/,
     );
+  });
+
+  it("rejects old npm before a bare install can resolve dependencies", () => {
+    const npmrc = readFileSync(".npmrc", "utf8");
+
+    assert.deepStrictEqual(pkg.devEngines.packageManager, {
+      name: "npm",
+      version: ">=11.10.0",
+      onFail: "error",
+    });
+    assert.match(npmrc, /^min-release-age=14$/m);
   });
 });

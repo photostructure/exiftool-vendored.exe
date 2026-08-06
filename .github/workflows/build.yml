@@ -45,7 +45,12 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           package-manager-cache: false
-      - run: npm ci --ignore-scripts
+      - name: Install the frozen compatibility lockfile
+        # Older bundled npm releases may validate this committed lockfile, but
+        # must not resolve dependencies. The clean-tree check below enforces it.
+        env:
+          npm_config_force: "true"
+        run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm test
       - name: Verify the tested source stayed unchanged

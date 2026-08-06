@@ -24,6 +24,13 @@
   ],
   "author": "Matthew McEachen <matthew-exiftoolvendored@mceachen.org>",
   "license": "MIT",
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": ">=11.10.0",
+      "onFail": "error"
+    }
+  },
   "packageManager": "npm@11.16.0",
   "scripts": {
     "prettier": "prettier --write .",
