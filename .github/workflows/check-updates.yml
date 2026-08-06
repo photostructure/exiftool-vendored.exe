@@ -52,8 +52,14 @@ jobs:
             # Get latest version for PR details
             $latestVersion = node -e "
               const { getLatestExifToolVersion } = require('./lib/version-utils');
-              getLatestExifToolVersion().then(console.log).catch(process.exit);
+              getLatestExifToolVersion().then(console.log).catch((err) => {
+                console.error(err.message);
+                process.exitCode = 2;
+              });
             "
+            if ($LASTEXITCODE -ne 0) {
+              throw 'Could not determine the latest ExifTool version'
+            }
             echo "latest_version=$latestVersion" >> $env:GITHUB_OUTPUT
           } else {
             exit 1
