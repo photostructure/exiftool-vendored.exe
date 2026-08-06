@@ -26,10 +26,11 @@ describe("exit codes on Windows", () => {
     assert(/process\.exitCode\s*=/.test(source));
   });
 
-  it("the update check workflow sets process.exitCode rather than exiting", () => {
+  it("the read-only update workflow delegates to the guarded script", () => {
     const workflow = readCode(".github", "workflows", "check-updates.yml");
 
     assert(!ExitCall.test(workflow), "process.exit() races undici teardown");
-    assert(/process\.exitCode\s*=/.test(workflow));
+    assert(/npm run check-version/.test(workflow));
+    assert(!/create-pull-request/.test(workflow));
   });
 });

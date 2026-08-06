@@ -13,21 +13,25 @@ concurrency:
 
 jobs:
   check-updates:
-    name: Check for and propose an ExifTool update
+    name: Detect an ExifTool update
     runs-on: windows-latest
     permissions:
-      contents: write # Push the signed automated update branch.
-      pull-requests: write # Open and update the ExifTool update pull request.
+      contents: read
 
     steps:
+      - name: Require the default branch
+        shell: pwsh
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if ($env:GITHUB_REF -ne "refs/heads/$env:DEFAULT_BRANCH") {
+            Write-Error "Update checks must run from $env:DEFAULT_BRANCH, not $env:GITHUB_REF"
+            exit 1
+          }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Configure git line endings
-        run: |
-          git config core.autocrlf false
-          git config core.eol lf
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -37,90 +41,12 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Check for updates
-        id: check
+      - name: Check for an ExifTool update
         shell: pwsh
         run: |
-          # Use our simplified version check script
-          node check-version.js
-          $exitCode = $LASTEXITCODE
-
-          if ($exitCode -eq 0) {
-            echo "update_needed=false" >> $env:GITHUB_OUTPUT
-          } elseif ($exitCode -eq 1) {
-            echo "update_needed=true" >> $env:GITHUB_OUTPUT
-            # Get latest version for PR details
-            $latestVersion = node -e "
-              const { getLatestExifToolVersion } = require('./lib/version-utils');
-              getLatestExifToolVersion().then(console.log).catch((err) => {
-                console.error(err.message);
-                process.exitCode = 2;
-              });
-            "
-            if ($LASTEXITCODE -ne 0) {
-              throw 'Could not determine the latest ExifTool version'
-            }
-            echo "latest_version=$latestVersion" >> $env:GITHUB_OUTPUT
-          } else {
-            exit 1
+          npm run check-version
+          $status = $LASTEXITCODE
+          if ($status -eq 1) {
+            Write-Output "::error::A new ExifTool release is available. Run npm run update:exiftool locally."
           }
-
-      - name: Update ExifTool
-        id: update
-        if: steps.check.outputs.update_needed == 'true'
-        shell: bash
-        run: |
-          # Run update script
-          npm run update:exiftool
-
-          # Get the new version after update
-          NEW_VERSION_FULL=$(node -p "require('./package.json').version")
-
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          # Remove -pre suffix for display
-          NEW_VERSION=${NEW_VERSION_FULL%-pre}
-          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Updated to version: $NEW_VERSION"
-
-          # Normalize line endings to ensure clean PR
-          echo "Normalizing line endings..."
-          git add --renormalize .
-
-      - name: Run tests
-        if: steps.check.outputs.update_needed == 'true'
-        run: |
-          npm run lint
-          npm test
-
-      - name: Create Pull Request
-        if: steps.check.outputs.update_needed == 'true'
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          sign-commits: true
-          commit-message: "chore(ExifTool): v${{ steps.check.outputs.latest_version }}"
-          title: "Update ExifTool to v${{ steps.check.outputs.latest_version }}"
-          body: |
-            Updates ExifTool to v${{ steps.check.outputs.latest_version }}.
-
-            This is an automated update created by the check-updates workflow.
-
-            ## Changes
-            - Updated ExifTool binary to latest version
-            - Package version updated to ${{ steps.check.outputs.latest_version }}-pre (will be finalized during release)
-
-            ## Testing
-            - ✅ Tests passed successfully
-
-            ## Next Steps
-            After merging this PR:
-            1. Go to the Actions tab
-            2. Run "Build & Prepare Release"
-            3. Inspect and approve the staged npm package with 2FA
-
-            Please review the changes and merge if everything looks good.
-          branch: update-exiftool-${{ steps.check.outputs.latest_version }}
-          delete-branch: true
-          labels: |
-            dependencies
-            automated
+          exit $status

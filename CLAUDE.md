@@ -43,12 +43,12 @@ npm run update:exiftool  # Runs update-exiftool.js to download and install lates
 
 This module follows the ExifTool versioning with an additional patch number when needed:
 
-### Automated Updates
+### Update Detection
 
-1. **GitHub Actions** automatically checks for ExifTool updates daily at 12 PM UTC
+1. **GitHub Actions** checks for ExifTool updates daily at 12 PM UTC
    - Workflow: `.github/workflows/check-updates.yml`
-   - Creates a PR if a new version is available
-   - Tests are run automatically before creating the PR
+   - The workflow is read-only and fails when a new version is available
+   - Manual runs must use the default branch
 
 2. **Manual Update Process**:
    - Run `npm run update:exiftool` to fetch and install the latest ExifTool binary
@@ -57,7 +57,7 @@ This module follows the ExifTool versioning with an additional patch number when
 
 ### Release Process
 
-1. Merge any automated update PRs
+1. Review and commit the locally generated update
 2. Go to the Actions tab on GitHub
 3. Follow `RELEASING.md`
    - The full test gate runs before the signed release commit and tag
