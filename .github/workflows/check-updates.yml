@@ -5,28 +5,37 @@ on:
     - cron: "0 12 * * *" # Run every day at 12 PM UTC
   workflow_dispatch: # Allow manual triggering
 
+permissions: {}
+
+concurrency:
+  group: check-updates-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   check-updates:
+    name: Check for and propose an ExifTool update
     runs-on: windows-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # Push the signed automated update branch.
+      pull-requests: write # Open and update the ExifTool update pull request.
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Configure git line endings
         run: |
           git config core.autocrlf false
           git config core.eol lf
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
-          cache: "npm"
+          node-version: 24.18.1
+          package-manager-cache: false
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Check for updates
         id: check
@@ -61,10 +70,10 @@ jobs:
           # Get the new version after update
           NEW_VERSION_FULL=$(node -p "require('./package.json').version")
 
-          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "changed=true" >> "$GITHUB_OUTPUT"
           # Remove -pre suffix for display
           NEW_VERSION=${NEW_VERSION_FULL%-pre}
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "Updated to version: $NEW_VERSION"
 
           # Normalize line endings to ensure clean PR
@@ -73,11 +82,13 @@ jobs:
 
       - name: Run tests
         if: steps.check.outputs.update_needed == 'true'
-        run: npm test
+        run: |
+          npm run lint
+          npm test
 
       - name: Create Pull Request
         if: steps.check.outputs.update_needed == 'true'
-        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           sign-commits: true
@@ -98,7 +109,8 @@ jobs:
             ## Next Steps
             After merging this PR:
             1. Go to the Actions tab
-            2. Run the "Release" workflow to publish to npm
+            2. Run "Build & Prepare Release"
+            3. Inspect and approve the staged npm package with 2FA
 
             Please review the changes and merge if everything looks good.
           branch: update-exiftool-${{ steps.check.outputs.latest_version }}

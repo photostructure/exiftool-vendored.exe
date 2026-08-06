@@ -4,13 +4,21 @@
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { createWriteStream, createReadStream } = require("node:fs");
-const { mkdir, rm, rename, stat } = require("node:fs/promises");
+const {
+  mkdir,
+  readFile,
+  rm,
+  rename,
+  stat,
+  writeFile,
+} = require("node:fs/promises");
 const { join } = require("node:path");
 const { pipeline } = require("node:stream/promises");
 
 const xml2js = require("xml2js");
 const { unzip } = require("cross-zip");
 const { fetchWithRetry, checkForUpdate } = require("./lib/version-utils");
+const { matchesVendorManifest } = require("./lib/vendor-manifest");
 
 // Currently is "12.88", but "13.1" is valid.
 
@@ -79,6 +87,39 @@ function computeSHA256(path) {
 }
 
 /**
+ * @param {string} basename
+ * @param {string} latestVersion
+ */
+function requireMatchingArchiveVersion(basename, latestVersion) {
+  const archiveVersion = /^exiftool-(\d+\.\d+)_64\.zip$/.exec(basename)?.[1];
+  if (archiveVersion == null || archiveVersion !== latestVersion) {
+    throw new Error(
+      `Latest tag ${latestVersion} does not match archive ${basename}`,
+    );
+  }
+  return archiveVersion;
+}
+
+/**
+ * Return the package version that npm must write to make the package and
+ * lockfile describe the vendored archive, or null when they already agree.
+ *
+ * @param {string} packageVersion
+ * @param {{ version?: unknown, packages?: Record<string, { version?: unknown }> }} lock
+ * @param {string} archiveVersion
+ */
+function requiredPackageVersionRepair(packageVersion, lock, archiveVersion) {
+  const match = /^(\d+)\.(\d+)\.\d+(?:-pre)?$/.exec(packageVersion);
+  if (match == null || `${match[1]}.${match[2]}` !== archiveVersion) {
+    return `${archiveVersion}.0-pre`;
+  }
+  return lock.version === packageVersion &&
+    lock.packages?.[""].version === packageVersion
+    ? null
+    : packageVersion;
+}
+
+/**
  * @param {string | URL | Request} url
  * @param {string} basename
  * @param {string} dir
@@ -127,12 +168,6 @@ async function run() {
   console.log(`Current version: ${currentVersion}`);
   console.log(`Latest version:  ${latestVersion}`);
 
-  if (!updateAvailable) {
-    console.log("✅ No-op: already up to date");
-    return;
-  }
-
-  console.log("📦 Update available, proceeding with download...");
   const enc = await fetchLatestEnclosure();
   const u = new URL(enc.url);
   const pathSegments = u.pathname.split("/").filter((s) => s.length > 0);
@@ -140,87 +175,173 @@ async function run() {
   if (basename == null) {
     throw new Error("Invalid basename from URL: " + enc.url);
   }
+  const archiveVersion = requireMatchingArchiveVersion(basename, latestVersion);
   const expectedSha256 = await fetchLatestSHA256(basename);
-  const dir = join(__dirname, ".dl");
-  const zipPath = await wget(enc.url, basename, dir, expectedSha256);
-  const expectedFileSize = parseInt(enc.length);
-  const actualFileSize = (await stat(zipPath)).size;
-  if (actualFileSize !== expectedFileSize) {
-    throw new Error(
-      "Unexpected file size: " +
-        JSON.stringify({
-          actualFileSize,
-          expectedFileSize,
-          url: enc.url,
-          file: zipPath,
-        }),
-    );
+  const expectedFileSize = Number.parseInt(enc.length, 10);
+  if (!Number.isSafeInteger(expectedFileSize) || expectedFileSize <= 0) {
+    throw new Error("Invalid file size from enclosure: " + enc.length);
   }
+  const expectedManifest = {
+    version: archiveVersion,
+    sourceUrl: enc.url,
+    platform: "win32",
+    architecture: "x64",
+    filename: basename,
+    size: expectedFileSize,
+    sha256: expectedSha256,
+  };
 
-  const expectedZipOutDir = join(dir, basename.replace(/\.zip$/, ""));
-  await rm(expectedZipOutDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 5,
-    retryDelay: 1000,
-  });
-
-  // Extract zip file using cross-zip (uses unzip on Unix, 7zip on Windows)
-  await new Promise((resolve, reject) => {
-    unzip(zipPath, dir, (err) => {
-      if (err) reject(new Error("Failed to extract zip: " + err.message));
-      else resolve(undefined);
-    });
-  });
-  const destDir = join(__dirname, "bin");
-  await rm(destDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 5,
-    retryDelay: 1000,
-  });
-  await rename(expectedZipOutDir, destDir);
-  await rename(
-    join(__dirname, "bin", "exiftool(-k).exe"),
-    join(__dirname, "bin", "exiftool.exe"),
+  const packageJson = JSON.parse(
+    await readFile(join(__dirname, "package.json"), "utf8"),
+  );
+  const packageLock = JSON.parse(
+    await readFile(join(__dirname, "package-lock.json"), "utf8"),
+  );
+  const packageVersionRepair = requiredPackageVersionRepair(
+    packageJson.version,
+    packageLock,
+    archiveVersion,
   );
 
-  let version;
-  if (process.platform === "win32") {
-    const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), [
-      "-ver",
-    ]);
-    if (versionResult.error) {
-      throw new Error(
-        "Failed to get ExifTool version: " + versionResult.error.message,
-      );
-    }
-    version = versionResult.stdout.toString().trim();
-  } else {
-    // On non-Windows platforms, extract version from filename
-    const versionMatch = basename.match(/exiftool-(\d+\.\d+)_/);
-    if (!versionMatch) {
-      throw new Error("Could not extract version from filename: " + basename);
-    }
-    version = versionMatch[1];
+  let actualManifest;
+  try {
+    actualManifest = JSON.parse(
+      await readFile(join(__dirname, "vendor-manifest.json"), "utf8"),
+    );
+  } catch (error) {
+    const err = /** @type {any} */ (error);
+    if (!(error instanceof SyntaxError) && err?.code !== "ENOENT") throw error;
   }
 
-  // Check if there are any pending updates
-  const gitStatus = spawnSync("git", ["status", "--porcelain=v1"])
-    .stdout.toString()
-    .trim();
+  const manifestMatches = matchesVendorManifest(
+    actualManifest,
+    expectedManifest,
+  );
+  const payloadNeedsRefresh = updateAvailable || !manifestMatches;
 
-  if (gitStatus.length === 0) {
-    console.log("No-op: already up to date");
-  } else {
-    // ExifTool never has a patch version
-    const pkgVer = version + ".0-pre";
-    console.log("Updating package.json to version " + pkgVer);
-    // Note: shell: true is required on Windows for npm command to work properly
-    spawnSync("npm", ["version", "--no-git-tag-version", pkgVer], {
-      shell: process.platform === "win32",
+  if (!payloadNeedsRefresh && packageVersionRepair == null) {
+    console.log("✅ No-op: already up to date and verified");
+    return;
+  }
+
+  if (payloadNeedsRefresh) {
+    console.log(
+      updateAvailable
+        ? "📦 Update available, proceeding with download..."
+        : "📦 Vendor manifest needs refresh, rebuilding from the verified archive...",
+    );
+    const dir = join(__dirname, ".dl");
+    const zipPath = await wget(enc.url, basename, dir, expectedSha256);
+    const actualFileSize = (await stat(zipPath)).size;
+    if (actualFileSize !== expectedFileSize) {
+      throw new Error(
+        "Unexpected file size: " +
+          JSON.stringify({
+            actualFileSize,
+            expectedFileSize,
+            url: enc.url,
+            file: zipPath,
+          }),
+      );
+    }
+
+    const expectedZipOutDir = join(dir, basename.replace(/\.zip$/, ""));
+    await rm(expectedZipOutDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 1000,
     });
+
+    // Extract zip file using cross-zip (uses unzip on Unix, 7zip on Windows)
+    await new Promise((resolve, reject) => {
+      unzip(zipPath, dir, (err) => {
+        if (err) reject(new Error("Failed to extract zip: " + err.message));
+        else resolve(undefined);
+      });
+    });
+    const destDir = join(__dirname, "bin");
+    await rm(destDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 1000,
+    });
+    await rename(expectedZipOutDir, destDir);
+    await rename(
+      join(__dirname, "bin", "exiftool(-k).exe"),
+      join(__dirname, "bin", "exiftool.exe"),
+    );
+
+    let version;
+    if (process.platform === "win32") {
+      const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), [
+        "-ver",
+      ]);
+      if (versionResult.error) {
+        throw new Error(
+          "Failed to get ExifTool version: " + versionResult.error.message,
+        );
+      }
+      if (versionResult.status !== 0) {
+        throw new Error(
+          "ExifTool version check failed: " +
+            versionResult.stderr.toString().trim(),
+        );
+      }
+      version = versionResult.stdout.toString().trim();
+    } else {
+      version = archiveVersion;
+    }
+    if (version !== archiveVersion) {
+      throw new Error(
+        `Archive ${basename} contains ExifTool ${version || "unknown"}`,
+      );
+    }
+
+    await writeFile(
+      join(__dirname, "vendor-manifest.json"),
+      JSON.stringify(expectedManifest, null, 2) + "\n",
+    );
+
+    console.log(`Refreshed the vendored payload and manifest for ${version}`);
+  }
+
+  if (packageVersionRepair != null) {
+    console.log(
+      "Updating package.json and package-lock.json to version " +
+        packageVersionRepair,
+    );
+    // Note: shell: true is required on Windows for npm command to work properly
+    const npmVersion = spawnSync(
+      "npm",
+      [
+        "version",
+        "--no-git-tag-version",
+        packageVersionRepair,
+        "--ignore-scripts",
+        "--allow-same-version",
+      ],
+      {
+        shell: process.platform === "win32",
+      },
+    );
+    if (npmVersion.error) {
+      throw new Error("npm version failed: " + npmVersion.error.message);
+    }
+    if (npmVersion.status !== 0) {
+      throw new Error(
+        "npm version failed: " + npmVersion.stderr?.toString().trim(),
+      );
+    }
   }
 }
 
-run();
+if (require.main === module) {
+  run();
+}
+
+module.exports = {
+  requiredPackageVersionRepair,
+  requireMatchingArchiveVersion,
+};

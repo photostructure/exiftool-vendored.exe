@@ -1,4 +1,4 @@
-name: Build & Release
+name: Build & Prepare Release
 
 on:
   push:
@@ -8,79 +8,164 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version bump (choose "patch" to bump a `-pre` prerelease into stable)
+        description: Version bump (patch finalizes an ExifTool -pre update)
         required: true
+        default: patch
         type: choice
-        default: "patch"
         options:
           - patch
           - minor
           - major
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  test:
+    name: Test Node.js ${{ matrix.node-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
+    defaults:
+      run:
+        shell: bash
+
     strategy:
+      fail-fast: false
       matrix:
-        # macos and linux are tested with exiftool-vendored.pl:
         os: [windows-latest]
-        # See https://github.com/nodejs/release#release-schedule
-        node-version: [20, 22, 24, 25]
+        node-version: [22, 24, 26]
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm ci
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
       - run: npm test
+      - name: Verify the tested source stayed unchanged
+        run: git diff --exit-code
 
   release:
-    runs-on: ubuntu-latest # git-ssh-signing-action doesn't currently support windows
-    needs: [build]
+    name: Create signed release commit and tag
+    runs-on: ubuntu-24.04
+    needs: test
     if: ${{ github.event_name == 'workflow_dispatch' }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    concurrency:
+      group: ${{ github.repository }}-release
+      cancel-in-progress: false
     permissions:
-      id-token: write # Required for OIDC
-      contents: write
-
+      contents: write # Push the signed release commit and annotated tag.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout the tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # Need full history for release-it
+          fetch-depth: 0
+          # This isolated job pushes the release commit and tag. It installs no
+          # dependencies and has no npm publishing authority.
+          persist-credentials: true
 
-      - name: Configure git line endings
+      - name: Verify the release source
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          git config core.autocrlf false
-          git config core.eol lf
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "::error::Releases must be dispatched from $DEFAULT_BRANCH, not $GITHUB_REF"
+            exit 1
+          fi
+          git fetch --no-tags origin "$DEFAULT_BRANCH"
+          if [[ "$(git rev-parse "origin/$DEFAULT_BRANCH")" != "$GITHUB_SHA" ]]; then
+            echo "::error::$DEFAULT_BRANCH moved after this release run started; run it again"
+            exit 1
+          fi
 
-      # setup-node with registry-url is required for OIDC trusted publishing
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      - name: Install the release Node.js toolchain
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
-          registry-url: "https://registry.npmjs.org"
+          node-version: 24.18.1
+          package-manager-cache: false
 
       - name: Set up SSH signing
-        uses: photostructure/git-ssh-signing-action@fdd4b062a9ba41473f013258cc9c7eea1640f826 # v1.2.0
+        uses: photostructure/git-ssh-signing-action@abd2a642ab7d704f66193472b47c72375d85a0c1 # v2.0.1
         with:
           ssh-signing-key: ${{ secrets.SSH_SIGNING_KEY }}
           git-user-name: ${{ secrets.GIT_USER_NAME }}
           git-user-email: ${{ secrets.GIT_USER_EMAIL }}
 
-      - name: Update npm to latest
-        run: |
-          echo "Current npm version:"
-          npm --version
-          echo "Updating npm to latest..."
-          npm install -g npm@latest
-          echo "New npm version:"
-          npm --version
-
-      - name: Install dependencies
-        run: npm ci --force # --force ignores the os limitation in package.json
-
-      - name: Release
-        run: npm run release -- --ci ${{ github.event.inputs.version }}
+      - name: Bump the package version
+        id: version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUMP: ${{ inputs.version }}
+        run: |
+          case "$BUMP" in
+            patch|minor|major) ;;
+            *)
+              echo "::error::Unsupported version bump: $BUMP"
+              exit 1
+              ;;
+          esac
+
+          npm version "$BUMP" --no-git-tag-version --ignore-scripts
+
+          if ! git diff --quiet -- . \
+            ':(exclude)package.json' \
+            ':(exclude)package-lock.json'; then
+            echo "::error::The version bump changed unexpected files"
+            git diff --name-only
+            exit 1
+          fi
+
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release version is not stable SemVer: $VERSION"
+            exit 1
+          fi
+          node -e '
+            const pkg = require("./package.json")
+            const lock = require("./package-lock.json")
+            const manifest = require("./vendor-manifest.json")
+            if (lock.version !== pkg.version || lock.packages[""].version !== pkg.version) {
+              throw new Error("package.json and package-lock.json versions do not match")
+            }
+            const [major, minor] = pkg.version.split(".")
+            if (manifest.version !== major + "." + minor) {
+              throw new Error("Package " + pkg.version + " does not match ExifTool " + manifest.version)
+            }
+          '
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create the signed release commit and tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git add package.json package-lock.json
+          git commit -m "Release $VERSION"
+          git tag -m "Release $VERSION" "$TAG"
+
+      - name: Push the commit and tag atomically
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: git push --atomic origin "HEAD:refs/heads/$DEFAULT_BRANCH" "refs/tags/$TAG"
+
+  dispatch:
+    name: Start tag-bound publishing
+    runs-on: ubuntu-24.04
+    needs: release
+    permissions:
+      actions: write # Dispatch publish.yaml at the validated release tag.
+    steps:
+      - name: Start the tag-bound publishing workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: gh workflow run publish.yaml --repo "$GITHUB_REPOSITORY" --ref "$TAG"

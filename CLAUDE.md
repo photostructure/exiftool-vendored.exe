@@ -11,6 +11,9 @@ The main entry point is `index.js`, which simply exports the path to the vendore
 ## Common Commands
 
 ```bash
+# Everything that should pass before a release
+make preflight  # or: npm run preflight
+
 # Run tests
 npm test
 
@@ -18,10 +21,10 @@ npm test
 npm run prettier
 
 # Update the vendored ExifTool binary to latest version
-npm run update-exiftool  # Runs update-exiftool.js to download and install latest ExifTool
+npm run update:exiftool  # Runs update-exiftool.js to download and install latest ExifTool
 
-# Create a new release
-npm run release
+# Release procedure
+# See RELEASING.md
 ```
 
 ## Architecture
@@ -31,6 +34,7 @@ npm run release
   - Downloads the official Windows 64-bit zip package
   - Verifies SHA256 checksums
   - Extracts and installs the binary in the `bin/` directory
+  - Records the verified artifact in `vendor-manifest.json`
   - Updates package.json version to match ExifTool version
 - `test/path-exists.js` - Simple test that verifies the exported path exists
 - `verification.sh` - Script to verify the integrity of Oliver Betz's ExifTool package
@@ -41,13 +45,13 @@ This module follows the ExifTool versioning with an additional patch number when
 
 ### Automated Updates
 
-1. **GitHub Actions** automatically checks for ExifTool updates every Monday at 6 AM UTC
+1. **GitHub Actions** automatically checks for ExifTool updates daily at 12 PM UTC
    - Workflow: `.github/workflows/check-updates.yml`
    - Creates a PR if a new version is available
    - Tests are run automatically before creating the PR
 
 2. **Manual Update Process**:
-   - Run `npm run update-exiftool` to fetch and install the latest ExifTool binary
+   - Run `npm run update:exiftool` to fetch and install the latest ExifTool binary
    - The script automatically updates package.json to match the ExifTool version with "-pre" suffix (e.g., "13.26.0-pre")
    - Commit the updated binary and package.json
 
@@ -55,10 +59,10 @@ This module follows the ExifTool versioning with an additional patch number when
 
 1. Merge any automated update PRs
 2. Go to the Actions tab on GitHub
-3. Run the "Release" workflow
-   - This removes the "-pre" suffix and publishes to npm
-   - Creates a GitHub release with proper tagging
-   - Uses GPG signing for commits and tags
+3. Follow `RELEASING.md`
+   - The full test gate runs before the signed release commit and tag
+   - The exact tag is packed and staged on npm
+   - A maintainer inspects and approves the stage with 2FA
 
 ### Version Numbering
 
@@ -73,8 +77,7 @@ This module follows the ExifTool versioning with an additional patch number when
 - Do not modify files in the `bin/` directory manually - use `update-exiftool.js`
 - The ExifTool binary and associated files in `bin/` are downloaded from official sources
 - This module is used by the main `exiftool-vendored` package for Windows support
-- Automation requires GitHub secrets:
-  - `NPM_TOKEN` for publishing to npm
-  - `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `GPG_FINGERPRINT` for signing
-  - `GIT_USER_NAME`, `GIT_USER_EMAIL` for git config
+- Publishing uses npm Trusted Publishing and must not have an npm publishing
+  token. The isolated release job uses `SSH_SIGNING_KEY`, `GIT_USER_NAME`, and
+  `GIT_USER_EMAIL` for the signed commit and tag.
 - Tests must pass before any release

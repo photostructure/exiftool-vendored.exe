@@ -24,30 +24,20 @@
   ],
   "author": "Matthew McEachen <matthew-exiftoolvendored@mceachen.org>",
   "license": "MIT",
+  "packageManager": "npm@11.16.0",
   "scripts": {
     "prettier": "prettier --write .",
+    "lint": "prettier --check .",
     "test": "mocha",
+    "check:npm-version": "node scripts/check-npm-version.js",
+    "preupdate": "npm run check:npm-version",
     "update": "run-s update:*",
-    "update:deps": "npm-check-updates --upgrade --install always",
+    "update:deps": "npm run check:npm-version && npm-check-updates --upgrade --install always",
     "update:exiftool": "node update-exiftool.js",
     "check-version": "node check-version.js",
-    "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v3/cmd/pinact@latest",
-    "update:actions": "pinact run -u",
-    "release": "release-it"
-  },
-  "release-it": {
-    "git": {
-      "requireBranch": "main",
-      "commitMessage": "Release ${version}",
-      "tagName": "${version}"
-    },
-    "github": {
-      "release": true
-    },
-    "npm": {
-      "publish": true,
-      "skipChecks": true
-    }
+    "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.1.0",
+    "update:actions": "go run github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.1.0 run -u",
+    "preflight": "npm run check:npm-version && run-s update prettier check-version test"
   },
   "devDependencies": {
     "cross-zip": "^4.0.1",
@@ -55,7 +45,6 @@
     "npm-check-updates": "^19.3.1",
     "npm-run-all2": "8.0.4",
     "prettier": "^3.8.1",
-    "release-it": "^19.2.4",
     "xml2js": "^0.6.2"
   }
 }
