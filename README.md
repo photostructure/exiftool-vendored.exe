@@ -11,6 +11,32 @@ Provides the win32 distribution of [ExifTool](http://www.sno.phy.queensu.ca/~phi
 [exiftool-vendored](https://github.com/photostructure/exiftool-vendored.js) for
 performant, type-safe access to this binary.**
 
+## Vendor patches
+
+The vendored payload includes downstream changes from every
+[`patches/*.patch`](https://github.com/photostructure/exiftool-vendored.exe/tree/main/patches)
+file. The update script applies them in lexical filename order after verifying
+and extracting the official ExifTool archive. Patch application uses zero
+fuzz, so every context line in each hunk must match exactly. If those context
+lines change upstream, the update fails instead of applying the patch
+approximately. The manifest records a hash of the ordered patch set. Updating
+the vendored payload on Windows requires GNU `patch` from Git for Windows.
+When no downstream changes are required, `patches/` may be absent and the
+manifest records the SHA-256 fingerprint of the empty patch set.
+
+The current
+[`exiftool-stdin-eof.patch`](https://github.com/photostructure/exiftool-vendored.exe/blob/main/patches/exiftool-stdin-eof.patch)
+makes stay-open ExifTool exit when its piped or socket stdin closes, while
+preserving append-after-EOF polling for regular files. The change is
+[reported upstream in exiftool/exiftool#458](https://github.com/exiftool/exiftool/issues/458)
+but is not yet included in a released ExifTool version.
+
+If an ExifTool update causes a patch to fail, review the upstream change. Then
+refresh the patch if it is still needed, or remove it if upstream now provides
+the same behavior. Removing the final patch may also remove `patches/`. Do not
+relax the patch options or bypass the failure. Run the full test suite and
+commit the patch, vendored source, and manifest changes together.
+
 ## Thanks to Phil Harvey and Oliver Betz!
 
 Phil Harvey has been [working tirelessly on ExifTool since 2003](https://exiftool.org/ancient_history.html).

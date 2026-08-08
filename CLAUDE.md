@@ -33,10 +33,14 @@ npm run update:exiftool  # Runs update-exiftool.js to download and install lates
 - `update-exiftool.js` - Script that fetches the latest Windows ExifTool package from exiftool.org
   - Downloads the official Windows 64-bit zip package
   - Verifies SHA256 checksums
-  - Extracts and installs the binary in the `bin/` directory
-  - Records the verified artifact in `vendor-manifest.json`
+  - Extracts the verified package into a staging directory
+  - Applies every `patches/*.patch` file in lexical filename order with zero fuzz
+  - Replaces `bin/` only after every patch applies successfully
+  - Records the upstream artifact and ordered patch-set hashes in `vendor-manifest.json`
   - Updates package.json version to match ExifTool version
-- `test/path-exists.js` - Simple test that verifies the exported path exists
+- `lib/vendor-patch-set.js` - Discovers and hashes the ordered patch series
+- `patches/` - Downstream changes; may be absent when none are required
+- `test/path-exists.js` - Tests the executable, stay-open behavior, and vendor manifest
 - `verification.sh` - Script to verify the integrity of Oliver Betz's ExifTool package
 
 ## Development Workflow
@@ -52,8 +56,18 @@ This module follows the ExifTool versioning with an additional patch number when
 
 2. **Manual Update Process**:
    - Run `npm run update:exiftool` to fetch and install the latest ExifTool binary
+   - Run the update from Git Bash, included with Git for Windows, so GNU `bash` and `patch` are available
+   - The script applies every `patches/*.patch` file with zero fuzz and stops before replacing `bin/` if any patch fails
    - The script automatically updates package.json to match the ExifTool version with "-pre" suffix (e.g., "13.26.0-pre")
-   - Commit the updated binary and package.json
+   - Commit the updated binary, patch series, manifest, and package metadata
+
+If strict patch application fails, do not add fuzz or bypass the patch. Compare
+the patch with the new upstream source. Refresh the patch if the downstream
+behavior is still required, or remove it if upstream provides equivalent
+behavior. Then rerun the update and the full test suite before committing the
+patch, `bin/`, and `vendor-manifest.json` changes together. If no downstream
+patches remain, `patches/` may be absent; the updater treats that as an empty
+patch set and installs the verified upstream package unchanged.
 
 ### Release Process
 
@@ -75,7 +89,7 @@ This module follows the ExifTool versioning with an additional patch number when
 
 - This package is Windows-only (as declared in package.json `os` field)
 - Do not modify files in the `bin/` directory manually - use `update-exiftool.js`
-- The ExifTool binary and associated files in `bin/` are downloaded from official sources
+- The base ExifTool binary and associated files are downloaded from official sources; `patches/` records every downstream source change
 - This module is used by the main `exiftool-vendored` package for Windows support
 - Publishing uses npm Trusted Publishing and must not have an npm publishing
   token. The isolated release job uses `SSH_SIGNING_KEY`, `GIT_USER_NAME`, and

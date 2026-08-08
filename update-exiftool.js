@@ -3,7 +3,11 @@
 
 const { spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { createWriteStream, createReadStream } = require("node:fs");
+const {
+  createWriteStream,
+  createReadStream,
+  readFileSync,
+} = require("node:fs");
 const {
   mkdir,
   readFile,
@@ -19,10 +23,37 @@ const xml2js = require("xml2js");
 const { unzip } = require("cross-zip");
 const { fetchWithRetry, checkForUpdate } = require("./lib/version-utils");
 const { matchesVendorManifest } = require("./lib/vendor-manifest");
+const { patchFiles, patchSetSha256 } = require("./lib/vendor-patch-set");
 
 // Currently is "12.88", but "13.1" is valid.
 
 const VersionRE = /\b([\d\.]{4,})\b/;
+
+/**
+ * @param {import("node:fs").PathOrFileDescriptor} patchFile
+ * @param {string} targetDirectory
+ */
+function applyVendorPatch(patchFile, targetDirectory) {
+  const patchArgs = ["-f", "-F", "0", "-p1"];
+  const command = process.platform === "win32" ? "bash" : "patch";
+  const args =
+    process.platform === "win32"
+      ? ["-lc", 'patch "$@"', "patch", ...patchArgs]
+      : patchArgs;
+  const result = spawnSync(command, args, {
+    cwd: targetDirectory,
+    encoding: "utf8",
+    input: readFileSync(patchFile),
+  });
+  if (result.error) {
+    throw new Error("Could not run vendor patch: " + result.error.message);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `Applying ${patchFile} failed:\n` + result.stdout + result.stderr,
+    );
+  }
+}
 
 async function fetchLatestEnclosure() {
   const response = await fetchWithRetry("https://exiftool.org/rss.xml");
@@ -189,6 +220,7 @@ async function run() {
     filename: basename,
     size: expectedFileSize,
     sha256: expectedSha256,
+    patchSetSha256,
   };
 
   const packageJson = JSON.parse(
@@ -260,6 +292,10 @@ async function run() {
         else resolve(undefined);
       });
     });
+    for (const patchFile of patchFiles) {
+      applyVendorPatch(patchFile, expectedZipOutDir);
+    }
+
     const destDir = join(__dirname, "bin");
     await rm(destDir, {
       recursive: true,
@@ -272,7 +308,6 @@ async function run() {
       join(__dirname, "bin", "exiftool(-k).exe"),
       join(__dirname, "bin", "exiftool.exe"),
     );
-
     let version;
     if (process.platform === "win32") {
       const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), [

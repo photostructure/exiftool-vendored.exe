@@ -5,5 +5,6 @@
   "architecture": "x64",
   "filename": "exiftool-13.59_64.zip",
   "size": 11183675,
-  "sha256": "44b512b25af500724ba579d0a53c8fc5851628b692dd5e5d94ae4a15c2cba9ec"
+  "sha256": "44b512b25af500724ba579d0a53c8fc5851628b692dd5e5d94ae4a15c2cba9ec",
+  "patchSetSha256": "8f2c28a3f4d00859f40ba3f3082087a6d0af61822b5b9c308ac704b0c5b24b26"
 }
