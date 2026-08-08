@@ -25,6 +25,11 @@ jobs:
     name: Test Node.js ${{ matrix.node-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
+    # npm checks devEngines before every command. Allow older bundled npm
+    # releases to exercise this frozen-lockfile compatibility job.
+    env:
+      npm_config_force: "true"
+
     defaults:
       run:
         shell: bash
@@ -48,8 +53,6 @@ jobs:
       - name: Install the frozen compatibility lockfile
         # Older bundled npm releases may validate this committed lockfile, but
         # must not resolve dependencies. The clean-tree check below enforces it.
-        env:
-          npm_config_force: "true"
         run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm test
