@@ -16,15 +16,16 @@ performant, type-safe access to this binary.**
 The vendored payload includes downstream changes from every
 [`patches/*.patch`](https://github.com/photostructure/exiftool-vendored.exe/tree/main/patches)
 file. The update script applies them in lexical filename order after verifying
-and extracting the official ExifTool archive. Patch application uses zero
+and extracting the official ExifTool archive. Patch filenames start with the
+date the patch was written (`YYYY-MM-DD-description.patch`), so that order is
+the order the patches were written. Patch application uses zero
 fuzz, so every context line in each hunk must match exactly. If those context
 lines change upstream, the update fails instead of applying the patch
 approximately. Updating the vendored payload on Windows requires GNU `patch`
 from Git for Windows. When no downstream changes are required, `patches/` may
 be absent.
 
-The current
-[`exiftool-stdin-eof.patch`](https://github.com/photostructure/exiftool-vendored.exe/blob/main/patches/exiftool-stdin-eof.patch)
+[`2026-08-07-exiftool-stdin-eof.patch`](https://github.com/photostructure/exiftool-vendored.exe/blob/main/patches/2026-08-07-exiftool-stdin-eof.patch)
 makes stay-open ExifTool exit when its piped or socket stdin closes, while
 preserving append-after-EOF polling for regular files. The change is
 [reported upstream in exiftool/exiftool#458](https://github.com/exiftool/exiftool/issues/458)

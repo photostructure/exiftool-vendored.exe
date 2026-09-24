@@ -30,7 +30,8 @@ npm run update:exiftool  # Runs update-exiftool.js to download and install lates
   - Downloads the official Windows 64-bit zip package
   - Verifies SHA256 checksums
   - Extracts the verified package into a staging directory
-  - Applies every `patches/*.patch` file in lexical filename order with zero fuzz
+  - Applies every `patches/*.patch` file in lexical filename order with zero fuzz;
+    filenames are `YYYY-MM-DD-description.patch`, dated when the patch was written
   - Replaces `bin/` only after every patch applies successfully
   - Updates package.json version to match ExifTool version
 - `lib/vendor-patch-set.js` - Discovers the ordered patch series
