@@ -244,6 +244,82 @@ describe("exported path", () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
+
+    describe("ImageHashProgress (patches/2026-09-24-exiftool-imagehash-progress.patch)", () => {
+      let tempDir;
+      let jpeg;
+
+      before(() => {
+        tempDir = fs.mkdtempSync(
+          nodePath.join(os.tmpdir(), "exiftool-progress-"),
+        );
+        jpeg = nodePath.join(tempDir, "scan.jpg");
+        // SOI, a bare SOS header, 64 runs of 64 KiB scan data, then EOI.
+        // ExifTool hashes JPEG scan data one 0xff-delimited run at a time, so
+        // stuffed 0xff00 bytes between the runs make each run a separate
+        // digest add. (Stuffing right before EOI would add an empty run, which
+        // repeats the last count.)
+        const scan = [];
+        for (let i = 0; i < 64; i++) {
+          if (i > 0) scan.push(Buffer.from([0xff, 0x00]));
+          scan.push(Buffer.alloc(64 << 10, 0x5a));
+        }
+        fs.writeFileSync(
+          jpeg,
+          Buffer.concat([
+            Buffer.from([0xff, 0xd8, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00]),
+            Buffer.from([0x00, 0x3f, 0x00]),
+            ...scan,
+            Buffer.from([0xff, 0xd9]),
+          ]),
+        );
+      });
+
+      after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+      function hashImageData(...apiArgs) {
+        const result = spawnSync(require(".."), [
+          ...apiArgs.flatMap((ea) => ["-api", ea]),
+          "-ImageDataHash",
+          "-s3",
+          jpeg,
+        ]);
+        assert.ifError(result.error);
+        assert.strictEqual(result.status, 0, result.stderr.toString());
+        return {
+          hash: result.stdout.toString().trim(),
+          stderr: result.stderr.toString().split(/\r?\n/).filter(Boolean),
+        };
+      }
+
+      it("reports increasing bytes hashed on stderr", () => {
+        const { hash, stderr } = hashImageData("ImageHashProgress=0.000001");
+        // Hashing each 64 KiB run takes far longer than the 1 µs interval.
+        assert(
+          stderr.length >= 64,
+          `expected a line per run, got ${stderr.length}`,
+        );
+        const bytes = stderr.map((line) => {
+          const m = /^\{progress:(\d+)\}$/.exec(line);
+          assert(m != null, "unexpected stderr line: " + JSON.stringify(line));
+          return Number(m[1]);
+        });
+        for (let i = 1; i < bytes.length; i++) {
+          assert(
+            bytes[i] > bytes[i - 1],
+            "not increasing: " + bytes.join(", "),
+          );
+        }
+        assert(bytes.at(-1) <= fs.statSync(jpeg).size);
+        assert.strictEqual(hash, hashImageData().hash);
+      });
+
+      it("prints nothing unless requested", () => {
+        const { hash, stderr } = hashImageData();
+        assert.match(hash, /^[0-9a-f]{32}$/);
+        assert.deepStrictEqual(stderr, []);
+      });
+    });
   }
 });
 

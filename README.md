@@ -31,6 +31,26 @@ preserving append-after-EOF polling for regular files. The change is
 [reported upstream in exiftool/exiftool#458](https://github.com/exiftool/exiftool/issues/458)
 but is not yet included in a released ExifTool version.
 
+[`2026-09-24-exiftool-imagehash-progress.patch`](https://github.com/photostructure/exiftool-vendored.exe/blob/main/patches/2026-09-24-exiftool-imagehash-progress.patch)
+adds an `ImageHashProgress` API option. Set to a number of seconds, it makes
+ExifTool print `{progress:BYTES}` to stderr at most that often while it
+computes `ImageDataHash`, where BYTES counts the image data hashed so far for
+the current file. exiftool-vendored uses it to tell a slow read of a large
+file from a stalled one. ExifTool builds without the patch ignore the option.
+
+Progress prints only between reads, when ExifTool adds a block to the digest.
+Most formats hash in 64 KiB reads, and JPEG scan data hashes between `0xff`
+bytes. QuickTime and MP4 audio and video samples are the exception: ExifTool
+reads each sample chunk whole. In sample files measured on 2026-09-24, the
+largest chunk was 0.3 to 3.1 MB for phone and action-camera video, and 28.2 MB
+for a 302 MB Fujifilm GFX100RF MOV. That chunk trips exiftool-vendored's
+default 30-second task timeout only on storage slower than about 1 MB/s, and
+PhotoStructure's 2-minute timeout below about 0.24 MB/s. USB 2 drives, SD
+cards, and network shares are faster than that, so the patch doesn't split
+these reads. If it ever needs to, `ProcessSamples` in `QuickTimeStream.pl` can
+hash `vide` and `soun` samples through ExifTool's 64 KiB `ImageDataHash()`
+reader instead of one read per chunk.
+
 If an ExifTool update causes a patch to fail, review the upstream change. Then
 refresh the patch if it is still needed, or remove it if upstream now provides
 the same behavior. Removing the final patch may also remove `patches/`. Do not

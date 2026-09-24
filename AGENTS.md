@@ -36,7 +36,7 @@ npm run update:exiftool  # Runs update-exiftool.js to download and install lates
   - Updates package.json version to match ExifTool version
 - `lib/vendor-patch-set.js` - Discovers the ordered patch series
 - `patches/` - Downstream changes; may be absent when none are required
-- `test/path-exists.js` - Tests the executable, stay-open behavior, and the updater's version checks
+- `test/path-exists.js` - Tests the executable, stay-open behavior, `ImageHashProgress`, and the updater's version checks
 - `verification.sh` - Script to verify the integrity of Oliver Betz's ExifTool package
 
 ## Development Workflow

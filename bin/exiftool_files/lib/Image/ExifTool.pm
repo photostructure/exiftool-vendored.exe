@@ -2804,6 +2804,11 @@ sub ExtractInfo($;@)
             } else {
                 $self->Warn('Install Digest::MD5 to calculate image data MD5');
             }
+            # (exiftool-vendored) report hashing progress on stderr
+            my $progress = $self->Options('ImageHashProgress');
+            if ($progress and $$self{ImageDataHash} and require Image::ExifTool::HashProgress) {
+                $$self{ImageDataHash} = Image::ExifTool::HashProgress->new($$self{ImageDataHash}, $progress);
+            }
         }
         ++$$self{FILE_SEQUENCE};        # count files read
     }
