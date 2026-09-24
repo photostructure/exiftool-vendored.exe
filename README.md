@@ -19,10 +19,9 @@ file. The update script applies them in lexical filename order after verifying
 and extracting the official ExifTool archive. Patch application uses zero
 fuzz, so every context line in each hunk must match exactly. If those context
 lines change upstream, the update fails instead of applying the patch
-approximately. The manifest records a hash of the ordered patch set. Updating
-the vendored payload on Windows requires GNU `patch` from Git for Windows.
-When no downstream changes are required, `patches/` may be absent and the
-manifest records the SHA-256 fingerprint of the empty patch set.
+approximately. Updating the vendored payload on Windows requires GNU `patch`
+from Git for Windows. When no downstream changes are required, `patches/` may
+be absent.
 
 The current
 [`exiftool-stdin-eof.patch`](https://github.com/photostructure/exiftool-vendored.exe/blob/main/patches/exiftool-stdin-eof.patch)
@@ -35,7 +34,7 @@ If an ExifTool update causes a patch to fail, review the upstream change. Then
 refresh the patch if it is still needed, or remove it if upstream now provides
 the same behavior. Removing the final patch may also remove `patches/`. Do not
 relax the patch options or bypass the failure. Run the full test suite and
-commit the patch, vendored source, and manifest changes together.
+commit the patch and vendored source changes together.
 
 ## Thanks to Phil Harvey and Oliver Betz!
 

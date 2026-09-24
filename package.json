@@ -17,8 +17,7 @@
   "files": [
     "bin",
     "index.js",
-    "patches",
-    "vendor-manifest.json"
+    "patches"
   ],
   "keywords": [
     "ExifTool",

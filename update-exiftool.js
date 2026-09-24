@@ -8,22 +8,17 @@ const {
   createReadStream,
   readFileSync,
 } = require("node:fs");
-const {
-  mkdir,
-  readFile,
-  rm,
-  rename,
-  stat,
-  writeFile,
-} = require("node:fs/promises");
+const { mkdir, readFile, rm, rename, stat } = require("node:fs/promises");
 const { join } = require("node:path");
 const { pipeline } = require("node:stream/promises");
 
 const xml2js = require("xml2js");
 const { unzip } = require("cross-zip");
-const { fetchWithRetry, checkForUpdate } = require("./lib/version-utils");
-const { matchesVendorManifest } = require("./lib/vendor-manifest");
-const { patchFiles, patchSetSha256 } = require("./lib/vendor-patch-set");
+const {
+  fetchWithRetry,
+  getLatestExifToolVersion,
+} = require("./lib/version-utils");
+const { patchFiles } = require("./lib/vendor-patch-set");
 
 // Currently is "12.88", but "13.1" is valid.
 
@@ -191,13 +186,8 @@ async function wget(url, basename, dir, sha256) {
 }
 
 async function run() {
-  // Check if an update is actually needed before downloading anything
-  console.log("Checking if ExifTool update is needed...");
-  const { currentVersion, latestVersion, updateAvailable } =
-    await checkForUpdate();
-
-  console.log(`Current version: ${currentVersion}`);
-  console.log(`Latest version:  ${latestVersion}`);
+  const latestVersion = await getLatestExifToolVersion();
+  console.log(`Latest version: ${latestVersion}`);
 
   const enc = await fetchLatestEnclosure();
   const u = new URL(enc.url);
@@ -212,17 +202,6 @@ async function run() {
   if (!Number.isSafeInteger(expectedFileSize) || expectedFileSize <= 0) {
     throw new Error("Invalid file size from enclosure: " + enc.length);
   }
-  const expectedManifest = {
-    version: archiveVersion,
-    sourceUrl: enc.url,
-    platform: "win32",
-    architecture: "x64",
-    filename: basename,
-    size: expectedFileSize,
-    sha256: expectedSha256,
-    patchSetSha256,
-  };
-
   const packageJson = JSON.parse(
     await readFile(join(__dirname, "package.json"), "utf8"),
   );
@@ -235,112 +214,79 @@ async function run() {
     archiveVersion,
   );
 
-  let actualManifest;
-  try {
-    actualManifest = JSON.parse(
-      await readFile(join(__dirname, "vendor-manifest.json"), "utf8"),
+  const dir = join(__dirname, ".dl");
+  const zipPath = await wget(enc.url, basename, dir, expectedSha256);
+  const actualFileSize = (await stat(zipPath)).size;
+  if (actualFileSize !== expectedFileSize) {
+    throw new Error(
+      "Unexpected file size: " +
+        JSON.stringify({
+          actualFileSize,
+          expectedFileSize,
+          url: enc.url,
+          file: zipPath,
+        }),
     );
-  } catch (error) {
-    const err = /** @type {any} */ (error);
-    if (!(error instanceof SyntaxError) && err?.code !== "ENOENT") throw error;
   }
 
-  const manifestMatches = matchesVendorManifest(
-    actualManifest,
-    expectedManifest,
+  const expectedZipOutDir = join(dir, basename.replace(/\.zip$/, ""));
+  await rm(expectedZipOutDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 1000,
+  });
+
+  // Extract zip file using cross-zip (uses unzip on Unix, 7zip on Windows)
+  await new Promise((resolve, reject) => {
+    unzip(zipPath, dir, (err) => {
+      if (err) reject(new Error("Failed to extract zip: " + err.message));
+      else resolve(undefined);
+    });
+  });
+  for (const patchFile of patchFiles) {
+    applyVendorPatch(patchFile, expectedZipOutDir);
+  }
+
+  const destDir = join(__dirname, "bin");
+  await rm(destDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 1000,
+  });
+  await rename(expectedZipOutDir, destDir);
+  await rename(
+    join(__dirname, "bin", "exiftool(-k).exe"),
+    join(__dirname, "bin", "exiftool.exe"),
   );
-  const payloadNeedsRefresh = updateAvailable || !manifestMatches;
-
-  if (!payloadNeedsRefresh && packageVersionRepair == null) {
-    console.log("✅ No-op: already up to date and verified");
-    return;
-  }
-
-  if (payloadNeedsRefresh) {
-    console.log(
-      updateAvailable
-        ? "📦 Update available, proceeding with download..."
-        : "📦 Vendor manifest needs refresh, rebuilding from the verified archive...",
-    );
-    const dir = join(__dirname, ".dl");
-    const zipPath = await wget(enc.url, basename, dir, expectedSha256);
-    const actualFileSize = (await stat(zipPath)).size;
-    if (actualFileSize !== expectedFileSize) {
+  let version;
+  if (process.platform === "win32") {
+    const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), [
+      "-ver",
+    ]);
+    if (versionResult.error) {
       throw new Error(
-        "Unexpected file size: " +
-          JSON.stringify({
-            actualFileSize,
-            expectedFileSize,
-            url: enc.url,
-            file: zipPath,
-          }),
+        "Failed to get ExifTool version: " + versionResult.error.message,
       );
     }
-
-    const expectedZipOutDir = join(dir, basename.replace(/\.zip$/, ""));
-    await rm(expectedZipOutDir, {
-      recursive: true,
-      force: true,
-      maxRetries: 5,
-      retryDelay: 1000,
-    });
-
-    // Extract zip file using cross-zip (uses unzip on Unix, 7zip on Windows)
-    await new Promise((resolve, reject) => {
-      unzip(zipPath, dir, (err) => {
-        if (err) reject(new Error("Failed to extract zip: " + err.message));
-        else resolve(undefined);
-      });
-    });
-    for (const patchFile of patchFiles) {
-      applyVendorPatch(patchFile, expectedZipOutDir);
-    }
-
-    const destDir = join(__dirname, "bin");
-    await rm(destDir, {
-      recursive: true,
-      force: true,
-      maxRetries: 5,
-      retryDelay: 1000,
-    });
-    await rename(expectedZipOutDir, destDir);
-    await rename(
-      join(__dirname, "bin", "exiftool(-k).exe"),
-      join(__dirname, "bin", "exiftool.exe"),
-    );
-    let version;
-    if (process.platform === "win32") {
-      const versionResult = spawnSync(join(__dirname, "bin", "exiftool.exe"), [
-        "-ver",
-      ]);
-      if (versionResult.error) {
-        throw new Error(
-          "Failed to get ExifTool version: " + versionResult.error.message,
-        );
-      }
-      if (versionResult.status !== 0) {
-        throw new Error(
-          "ExifTool version check failed: " +
-            versionResult.stderr.toString().trim(),
-        );
-      }
-      version = versionResult.stdout.toString().trim();
-    } else {
-      version = archiveVersion;
-    }
-    if (version !== archiveVersion) {
+    if (versionResult.status !== 0) {
       throw new Error(
-        `Archive ${basename} contains ExifTool ${version || "unknown"}`,
+        "ExifTool version check failed: " +
+          versionResult.stderr.toString().trim(),
       );
     }
-
-    await writeFile(
-      join(__dirname, "vendor-manifest.json"),
-      JSON.stringify(expectedManifest, null, 2) + "\n",
-    );
-
-    console.log(`Refreshed the vendored payload and manifest for ${version}`);
+    version = versionResult.stdout.toString().trim();
+  } else {
+    version = archiveVersion;
   }
+  if (version !== archiveVersion) {
+    throw new Error(
+      `Archive ${basename} contains ExifTool ${version || "unknown"}`,
+    );
+  }
+
+  console.log(`Refreshed the vendored payload for ${version}`);
 
   if (packageVersionRepair != null) {
     console.log(

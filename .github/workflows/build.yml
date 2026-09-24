@@ -138,13 +138,15 @@ jobs:
           node -e '
             const pkg = require("./package.json")
             const lock = require("./package-lock.json")
-            const manifest = require("./vendor-manifest.json")
+            const exiftoolVersion = require("node:child_process")
+              .execFileSync("perl", ["ver.pl"], { encoding: "utf8" })
+              .trim()
             if (lock.version !== pkg.version || lock.packages[""].version !== pkg.version) {
               throw new Error("package.json and package-lock.json versions do not match")
             }
             const [major, minor] = pkg.version.split(".")
-            if (manifest.version !== major + "." + minor) {
-              throw new Error("Package " + pkg.version + " does not match ExifTool " + manifest.version)
+            if (exiftoolVersion !== major + "." + minor) {
+              throw new Error("Package " + pkg.version + " does not match ExifTool " + exiftoolVersion)
             }
           '
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

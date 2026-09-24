@@ -32,11 +32,10 @@ npm run update:exiftool  # Runs update-exiftool.js to download and install lates
   - Extracts the verified package into a staging directory
   - Applies every `patches/*.patch` file in lexical filename order with zero fuzz
   - Replaces `bin/` only after every patch applies successfully
-  - Records the upstream artifact and ordered patch-set hashes in `vendor-manifest.json`
   - Updates package.json version to match ExifTool version
-- `lib/vendor-patch-set.js` - Discovers and hashes the ordered patch series
+- `lib/vendor-patch-set.js` - Discovers the ordered patch series
 - `patches/` - Downstream changes; may be absent when none are required
-- `test/path-exists.js` - Tests the executable, stay-open behavior, and vendor manifest
+- `test/path-exists.js` - Tests the executable, stay-open behavior, and the updater's version checks
 - `verification.sh` - Script to verify the integrity of Oliver Betz's ExifTool package
 
 ## Development Workflow
@@ -55,15 +54,15 @@ This module follows the ExifTool versioning with an additional patch number when
    - Run the update from Git Bash, included with Git for Windows, so GNU `bash` and `patch` are available
    - The script applies every `patches/*.patch` file with zero fuzz and stops before replacing `bin/` if any patch fails
    - The script automatically updates package.json to match the ExifTool version with "-pre" suffix (e.g., "13.26.0-pre")
-   - Commit the updated binary, patch series, manifest, and package metadata
+   - Commit the updated binary, patch series, and package metadata
 
 If strict patch application fails, do not add fuzz or bypass the patch. Compare
 the patch with the new upstream source. Refresh the patch if the downstream
 behavior is still required, or remove it if upstream provides equivalent
 behavior. Then rerun the update and the full test suite before committing the
-patch, `bin/`, and `vendor-manifest.json` changes together. If no downstream
-patches remain, `patches/` may be absent; the updater treats that as an empty
-patch set and installs the verified upstream package unchanged.
+patch and `bin/` changes together. If no downstream patches remain, `patches/`
+may be absent; the updater then installs the verified upstream package
+unchanged.
 
 ### Release Process
 
