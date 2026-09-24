@@ -71,6 +71,7 @@ unchanged.
 2. Go to the Actions tab on GitHub
 3. Follow `RELEASING.md`
    - The full test gate runs before the signed release commit and tag
+   - The workflow bumps the patch version
    - The exact tag is packed and staged on npm
    - A maintainer inspects and approves the stage with 2FA
 

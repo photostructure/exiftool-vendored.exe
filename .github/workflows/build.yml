@@ -6,16 +6,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: Version bump (patch finalizes an ExifTool -pre update)
-        required: true
-        default: patch
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
 
 permissions:
   contents: read
@@ -109,18 +99,11 @@ jobs:
 
       - name: Bump the package version
         id: version
-        env:
-          BUMP: ${{ inputs.version }}
         run: |
-          case "$BUMP" in
-            patch|minor|major) ;;
-            *)
-              echo "::error::Unsupported version bump: $BUMP"
-              exit 1
-              ;;
-          esac
-
-          npm version "$BUMP" --no-git-tag-version --ignore-scripts
+          # The package's major.minor is the vendored ExifTool version, so a
+          # release only bumps patch. That also turns an ExifTool update's
+          # X.Y.0-pre into X.Y.0.
+          npm version patch --no-git-tag-version --ignore-scripts
 
           if ! git diff --quiet -- . \
             ':(exclude)package.json' \
