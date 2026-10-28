@@ -333,7 +333,11 @@ describe("update-exiftool.js", () => {
       exiftoolVersion,
     );
     assert.throws(
-      () => requireMatchingArchiveVersion(filename, "13.60"),
+      () =>
+        requireMatchingArchiveVersion(
+          filename,
+          `${major}.${Number(minor) + 1}`,
+        ),
       /does not match archive/,
     );
     assert.throws(
