@@ -11,7 +11,7 @@ use strict;
 use warnings;
 require 5.004;
 
-my $version = '13.59';
+my $version = '13.60';
 
 $^W = 1;    # enable global warnings
 
@@ -456,8 +456,8 @@ if ($stayOpen >= 2) {
 
 # initialize necessary static file-scope variables
 # (not done: @commonArgs, @moreArgs, $critical, $binaryStdout, $helped,
-#  $interrupted, $mt, $pause, $rtnValApp, $rtnValPrev, $stayOpen, $stayOpenBuff, $stayOpenFile,
-#  $stayOpenStdin)
+#  $interrupted, $mt, $pause, $rtnValApp, $rtnValPrev, $stayOpen, $stayOpenBuff,
+#  $stayOpenFile, $stayOpenStdin)
 undef @condition;
 undef @csvExclude;
 undef @csvFiles;
@@ -4981,8 +4981,7 @@ sub ReadStayOpen($)
                 close STAYOPEN;
                 $stayOpen = 0;
                 last;
-            }
-            # sysread() didn't block (eg. when reading from a file),
+            }            # sysread() didn't block (eg. when reading from a file),
             # so wait for a short time (1/100 sec) then try again
             # Note: may break out of this early if SIGCONT is received
             select(undef,undef,undef,0.01);
