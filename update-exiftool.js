@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 
-const { spawnSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const {
   createWriteStream,
@@ -244,6 +244,12 @@ async function run() {
       else resolve(undefined);
     });
   });
+  // The zip stores every entry as r-x and unzip keeps those modes: patch could
+  // not create its temporary files in exiftool_files/, and git would record
+  // every file as executable. Windows-built commits store them as 644.
+  if (process.platform !== "win32") {
+    execFileSync("chmod", ["-R", "u+w,a-x,a+X", expectedZipOutDir]);
+  }
   for (const patchFile of patchFiles) {
     applyVendorPatch(patchFile, expectedZipOutDir);
   }
