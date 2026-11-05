@@ -285,6 +285,15 @@ jobs:
     permissions:
       contents: write # Create the immutable GitHub release.
     steps:
+      # Create the release only once npm serves the version, so the watcher
+      # email announces an installable package.
+      - name: Wait for the npm stage approval
+        uses: photostructure/changelog-release-action@2319f91de9a32bccbb3996cd674df93ba5160d1a # v0.2.0
+        with:
+          command: wait-for-npm
+          tag: ${{ github.ref_name }}
+
+      # Check the tag after the wait: it can move while the job waits.
       - name: Verify the tag and create the release
         env:
           GH_TOKEN: ${{ github.token }}

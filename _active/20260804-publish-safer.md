@@ -66,11 +66,13 @@ drill. Delete legacy remote branches only after explicit maintainer approval.
 
 - Keep manual patch/minor/major dispatch, bare version tags, stable-only
   releases, and the npm `latest` dist-tag.
-- Use a 14-day dependency and Action cooldown with no exclusions.
+- Use a 14-day dependency and Action cooldown. The one exclusion is
+  photostructure's own Actions, so a release can pin a new version of them at
+  once.
 - Use the repository `GITHUB_TOKEN` pilot for the signed atomic version/tag
   push and explicit tag-bound publisher dispatch.
-- Create the immutable GitHub release after npm accepts the stage; the human
-  2FA approval remains the final npm publication gate.
+- Create the immutable GitHub release once npm serves the approved version;
+  the human 2FA approval remains the final npm publication gate.
 - Use no npm publishing token, no project dependency, no checkout, and no cache
   in the OIDC staging job.
 
