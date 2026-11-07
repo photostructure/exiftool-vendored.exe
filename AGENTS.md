@@ -34,7 +34,10 @@ npm run update:exiftool  # Runs update-exiftool.js to download and install lates
     filenames are `YYYY-MM-DD-description.patch`, dated when the patch was written
   - Replaces `bin/` only after every patch applies successfully
   - Updates package.json version to match ExifTool version
+  - Writes the release note for a new ExifTool version into `CHANGELOG.md`
 - `lib/vendor-patch-set.js` - Discovers the ordered patch series
+- `lib/changelog.js` - Writes the updater's `CHANGELOG.md` note under
+  `## [Unreleased (X.YY.0)]`
 - `patches/` - Downstream changes; may be absent when none are required
 - `test/path-exists.js` - Tests the executable, stay-open behavior, `ImageHashProgress`, and the updater's version checks
 - `verification.sh` - Script to verify the integrity of Oliver Betz's ExifTool package
@@ -55,7 +58,8 @@ This module follows the ExifTool versioning with an additional patch number when
    - Run the update from Git Bash, included with Git for Windows, so GNU `bash` and `patch` are available
    - The script applies every `patches/*.patch` file with zero fuzz and stops before replacing `bin/` if any patch fails
    - The script automatically updates package.json to match the ExifTool version with "-pre" suffix (e.g., "13.26.0-pre")
-   - Commit the updated binary, patch series, and package metadata
+   - The script changes the Unreleased heading in `CHANGELOG.md` to `## [Unreleased (13.26.0)]` and adds `- 📦 Updated ExifTool to [13.26](https://exiftool.org/history.html#v13.26).`, replacing the line an earlier unreleased update wrote. It stops before replacing `bin/` if that heading is missing or names minor or major
+   - Commit the updated binary, patch series, package metadata, and `CHANGELOG.md`
 
 If strict patch application fails, do not add fuzz or bypass the patch. Compare
 the patch with the new upstream source. Refresh the patch if the downstream
@@ -67,13 +71,20 @@ unchanged.
 
 ### Release Process
 
-1. Review and commit the locally generated update
+1. Review and commit the locally generated update, or, for a package-only
+   release, write its note by hand in `CHANGELOG.md` under
+   `## [Unreleased (13.26.1)]`, the next patch version
 2. Go to the Actions tab on GitHub
 3. Follow `RELEASING.md`
+   - The workflow reads the version from the `CHANGELOG.md` heading and
+     refuses one whose major.minor is not the vendored ExifTool version
    - The full test gate runs before the signed release commit and tag
-   - The workflow bumps the patch version
+   - The workflow sets that version and stamps the `CHANGELOG.md` section
+     with the version and date
    - The exact tag is packed and staged on npm
    - A maintainer inspects and approves the stage with 2FA
+   - Once npm serves the version, the GitHub release is created with that
+     `CHANGELOG.md` section as its notes
 
 ### Version Numbering
 
@@ -81,6 +92,8 @@ unchanged.
 - During development: version has "-pre" suffix (e.g., "13.26.0-pre")
 - On release: "-pre" suffix is removed (e.g., "13.26.0")
 - Additional patch releases can be made if needed (e.g., "13.26.1" for fixes)
+- Minor and major releases are not possible: the version's major.minor is
+  always the vendored ExifTool version
 
 ## Important Notes
 

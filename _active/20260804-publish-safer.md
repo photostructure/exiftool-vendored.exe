@@ -64,15 +64,22 @@ drill. Delete legacy remote branches only after explicit maintainer approval.
 
 ## Decisions
 
-- Keep manual patch/minor/major dispatch, bare version tags, stable-only
-  releases, and the npm `latest` dist-tag.
+- Keep manual dispatch, bare version tags, stable-only releases, and the npm
+  `latest` dist-tag. The release takes its version from the `CHANGELOG.md`
+  heading, such as `## [Unreleased (13.61.0)]`, and fails unless that
+  version's major.minor is the vendored ExifTool version and the section has
+  notes.
 - Use a 14-day dependency and Action cooldown. The one exclusion is
   photostructure's own Actions, so a release can pin a new version of them at
   once.
 - Use the repository `GITHUB_TOKEN` pilot for the signed atomic version/tag
   push and explicit tag-bound publisher dispatch.
-- Create the immutable GitHub release once npm serves the approved version;
-  the human 2FA approval remains the final npm publication gate.
+- Create the immutable GitHub release once npm serves the approved version,
+  with the version's `CHANGELOG.md` section as its notes; the human 2FA
+  approval remains the final npm publication gate.
+- `update-exiftool.js` writes the `CHANGELOG.md` note and the
+  `## [Unreleased (X.YY.0)]` heading for a new ExifTool version, so the line
+  the release publishes and its version are in the committed diff.
 - Use no npm publishing token, no project dependency, no checkout, and no cache
   in the OIDC staging job.
 

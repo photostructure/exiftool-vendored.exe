@@ -8,7 +8,14 @@ const {
   createReadStream,
   readFileSync,
 } = require("node:fs");
-const { mkdir, readFile, rm, rename, stat } = require("node:fs/promises");
+const {
+  mkdir,
+  readFile,
+  rm,
+  rename,
+  stat,
+  writeFile,
+} = require("node:fs/promises");
 const { join } = require("node:path");
 const { pipeline } = require("node:stream/promises");
 
@@ -19,6 +26,7 @@ const {
   getLatestExifToolVersion,
 } = require("./lib/version-utils");
 const { patchFiles } = require("./lib/vendor-patch-set");
+const { noteExifToolUpdate } = require("./lib/changelog");
 
 // Currently is "12.88", but "13.1" is valid.
 
@@ -213,6 +221,15 @@ async function run() {
     packageLock,
     archiveVersion,
   );
+  // Build the CHANGELOG.md note now, so a heading the release would refuse
+  // stops the update before it replaces bin/.
+  const changelogPath = join(__dirname, "CHANGELOG.md");
+  const changelog = await readFile(changelogPath, "utf8");
+  const notedChangelog = noteExifToolUpdate(
+    changelog,
+    packageVersionRepair ?? packageJson.version,
+    archiveVersion,
+  );
 
   const dir = join(__dirname, ".dl");
   const zipPath = await wget(enc.url, basename, dir, expectedSha256);
@@ -293,6 +310,11 @@ async function run() {
   }
 
   console.log(`Refreshed the vendored payload for ${version}`);
+
+  if (notedChangelog !== changelog) {
+    console.log(`Noting ExifTool ${version} in CHANGELOG.md`);
+    await writeFile(changelogPath, notedChangelog);
+  }
 
   if (packageVersionRepair != null) {
     console.log(
