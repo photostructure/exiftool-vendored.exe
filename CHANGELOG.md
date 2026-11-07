@@ -17,6 +17,10 @@ Releases through 13.60.0 are described on the
 [GitHub Releases](https://github.com/photostructure/exiftool-vendored.exe/releases)
 page.
 
-## [Unreleased (13.61.0)]
+## [Unreleased]
+
+## [13.61.0] - 2026-11-07
 
 - 📦 Updated ExifTool to [13.61](https://exiftool.org/history.html#v13.61).
+
+[13.61.0]: https://github.com/photostructure/exiftool-vendored.exe/releases/tag/13.61.0
