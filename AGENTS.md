@@ -36,6 +36,8 @@ npm run update:exiftool  # Runs update-exiftool.js to download and install lates
   - Updates package.json version to match ExifTool version
   - Writes the release note for a new ExifTool version into `CHANGELOG.md`
 - `lib/vendor-patch-set.js` - Discovers the ordered patch series
+- `lib/package-version.js` - Compares the package version with the vendored
+  ExifTool version as numbers, for the updater and the release workflow
 - `lib/changelog.js` - Writes the updater's `CHANGELOG.md` note under
   `## [Unreleased (X.YY.0)]`
 - `patches/` - Downstream changes; may be absent when none are required
@@ -57,7 +59,7 @@ This module follows the ExifTool versioning with an additional patch number when
    - Run `npm run update:exiftool` to fetch and install the latest ExifTool binary
    - Run the update from Git Bash, included with Git for Windows, so GNU `bash` and `patch` are available
    - The script applies every `patches/*.patch` file with zero fuzz and stops before replacing `bin/` if any patch fails
-   - The script automatically updates package.json to match the ExifTool version with "-pre" suffix (e.g., "13.26.0-pre")
+   - The script automatically updates package.json to match the ExifTool version with "-pre" suffix (e.g., "13.26.0-pre"); SemVer drops a zero-padded minor, so ExifTool 14.05 becomes "14.5.0-pre"
    - The script changes the Unreleased heading in `CHANGELOG.md` to `## [Unreleased (13.26.0)]` and adds `- 📦 Updated ExifTool to [13.26](https://exiftool.org/history.html#v13.26).`, replacing the line an earlier unreleased update wrote. It stops before replacing `bin/` if that heading is missing or names minor or major
    - Commit the updated binary, patch series, package metadata, and `CHANGELOG.md`
 
@@ -77,7 +79,8 @@ unchanged.
 2. Go to the Actions tab on GitHub
 3. Follow `RELEASING.md`
    - The workflow reads the version from the `CHANGELOG.md` heading and
-     refuses one whose major.minor is not the vendored ExifTool version
+     refuses one whose major.minor, compared as numbers, is not the vendored
+     ExifTool version
    - The full test gate runs before the signed release commit and tag
    - The workflow sets that version and stamps the `CHANGELOG.md` section
      with the version and date

@@ -1,7 +1,9 @@
 # Releasing `exiftool-vendored.exe`
 
 The package's major.minor is the vendored ExifTool version: ExifTool 13.61
-ships as `13.61.0`, and a package-only release after it as `13.61.1`.
+ships as `13.61.0`, and a package-only release after it as `13.61.1`. SemVer
+drops ExifTool's zero-padded minor, so ExifTool 14.05 ships as `14.5.0`, and
+the release workflow compares major and minor as numbers.
 
 ## Write the release notes
 

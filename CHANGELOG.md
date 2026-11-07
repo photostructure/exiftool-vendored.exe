@@ -1,7 +1,8 @@
 # Changelog
 
 **The `MAJOR.MINOR` version** is the vendored ExifTool version: ExifTool 13.61
-ships as 13.61.0.
+ships as 13.61.0. SemVer drops ExifTool's zero-padded minor, so ExifTool 14.05
+ships as 14.5.0.
 
 **The `PATCH` version** counts releases of that ExifTool version, so a fix to
 this package alone ships as 13.61.1.

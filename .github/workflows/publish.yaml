@@ -190,15 +190,17 @@ jobs:
           mkdir package-unpacked
           tar -xzf "${TARBALLS[0]}" -C package-unpacked
           PACKAGE_DIR="$PWD/package-unpacked/package" \
-          EXPECTED_BINARY_VERSION="${EXPECTED_PACKAGE_VERSION%.*}" \
             node -e '
               const { spawnSync } = require("node:child_process")
               const path = require("node:path")
               const executable = require(path.resolve(process.env.PACKAGE_DIR))
               const result = spawnSync(executable, ["-ver"], { encoding: "utf8" })
               if (result.error) throw result.error
-              if (result.status !== 0 || result.stderr !== "" ||
-                  result.stdout.trim() !== process.env.EXPECTED_BINARY_VERSION) {
+              // ExifTool 14.05 ships as package 14.5.x, so compare numbers.
+              const [major, minor] = process.env.EXPECTED_PACKAGE_VERSION.split(".").map(Number)
+              const ver = /^(\d+)\.(\d+)$/.exec(result.stdout.trim())
+              if (result.status !== 0 || result.stderr !== "" || ver == null ||
+                  Number(ver[1]) !== major || Number(ver[2]) !== minor) {
                 throw new Error("Unexpected ExifTool result: " + JSON.stringify(result))
               }
             '

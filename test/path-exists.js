@@ -4,14 +4,34 @@ const assert = require("node:assert");
 const os = require("node:os");
 const nodePath = require("node:path");
 const pkg = require("../package.json");
+const { requireMatchingArchiveVersion } = require("../update-exiftool");
 const {
+  exiftoolMajorMinor,
+  packageFollowsExifTool,
   requiredPackageVersionRepair,
-  requireMatchingArchiveVersion,
-} = require("../update-exiftool");
+} = require("../lib/package-version");
 
-// The package version is the vendored ExifTool version plus a patch number.
-const [major, minor] = pkg.version.replace(/-pre$/, "").split(".");
-const exiftoolVersion = `${major}.${minor}`;
+// The vendored ExifTool's version as `exiftool -ver` prints it, such as
+// "14.05". The package version can't supply it: ExifTool 14.05 ships as
+// package 14.5.0.
+const exiftoolVersion = /^\$VERSION = '(\d+\.\d+)';$/m.exec(
+  fs.readFileSync(
+    nodePath.join(
+      __dirname,
+      "..",
+      "bin",
+      "exiftool_files",
+      "lib",
+      "Image",
+      "ExifTool.pm",
+    ),
+    "utf8",
+  ),
+)?.[1];
+if (exiftoolVersion == null) {
+  throw new Error("Image/ExifTool.pm has no $VERSION line");
+}
+const [major, minor] = exiftoolMajorMinor(exiftoolVersion);
 
 async function beforeTimeout(promise, timeoutMs, message) {
   let timer;
@@ -324,6 +344,10 @@ describe("exported path", () => {
 });
 
 describe("update-exiftool.js", () => {
+  it("vendors the ExifTool that the package version names", () => {
+    assert(packageFollowsExifTool(pkg.version, exiftoolVersion));
+  });
+
   it("rejects a download whose archive and latest tag disagree", () => {
     // Ground truth: curl -fsSL https://exiftool.org/rss.xml | grep -F
     // "exiftool-13.59_64.zip" shows the official x64 archive naming scheme.
@@ -333,11 +357,7 @@ describe("update-exiftool.js", () => {
       exiftoolVersion,
     );
     assert.throws(
-      () =>
-        requireMatchingArchiveVersion(
-          filename,
-          `${major}.${Number(minor) + 1}`,
-        ),
+      () => requireMatchingArchiveVersion(filename, `${major}.${minor + 1}`),
       /does not match archive/,
     );
     assert.throws(
@@ -361,7 +381,7 @@ describe("update-exiftool.js", () => {
     );
     assert.strictEqual(
       requiredPackageVersionRepair("13.58.0", currentLock, exiftoolVersion),
-      `${exiftoolVersion}.0-pre`,
+      `${major}.${minor}.0-pre`,
     );
     assert.strictEqual(
       requiredPackageVersionRepair(
