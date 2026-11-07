@@ -344,6 +344,17 @@ describe("exported path", () => {
 });
 
 describe("update-exiftool.js", () => {
+  it("runs npm version in the package directory", () => {
+    // run() downloads from exiftool.org, so no offline test reaches this
+    // spawn. Check that it sets cwd, as the updater's other paths use
+    // __dirname.
+    const source = fs.readFileSync(
+      nodePath.join(__dirname, "..", "update-exiftool.js"),
+      "utf8",
+    );
+    assert.match(source, /spawnSync\(\s*"npm",[^)]*?cwd: __dirname,/);
+  });
+
   it("vendors the ExifTool that the package version names", () => {
     assert(packageFollowsExifTool(pkg.version, exiftoolVersion));
   });

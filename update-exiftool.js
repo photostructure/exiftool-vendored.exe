@@ -314,6 +314,7 @@ async function run() {
         "--allow-same-version",
       ],
       {
+        cwd: __dirname,
         shell: process.platform === "win32",
       },
     );
