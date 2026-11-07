@@ -7,8 +7,8 @@ const { checkForUpdate } = require("./lib/version-utils");
 // process.exit(): global fetch() hands the TLS socket to an undici worker
 // thread, and on Windows process.exit() races that thread's teardown and aborts
 // the process with "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)"
-// (nodejs/node#56645). The workflow reads our exit code, so an abort here reads
-// as a failed update check.
+// (nodejs/node#56645). `npm run preflight` reads our exit code, so an abort here
+// reads as a failed update check.
 async function main() {
   try {
     const { currentVersion, latestVersion, updateAvailable } =

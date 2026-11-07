@@ -6,17 +6,18 @@ const { join } = require("node:path");
 // undici keeps the TLS socket on a worker thread, and process.exit() races its
 // teardown (nodejs/node#56645). The abort is deterministic against a remote
 // HTTPS host but does not reproduce against a loopback server, so there is no
-// offline test for the crash itself -- guard the pattern instead. The
-// check-updates workflow branches on this script's exit code, so an abort here
-// reads as "the update check failed."
-// `process.exit(2)` and the bare `.catch(process.exit)` this replaced.
+// offline test for the crash itself -- guard the pattern instead. `npm run
+// preflight` stops on this script's exit code, so an abort here reads as "the
+// update check failed."
+// Matches process.exit(…) and process.exit passed as a callback, but not
+// process.exitCode.
 const ExitCall = /process\.exit\b(?!Code)/;
 
-/** @param {string[]} parts */
-const readCode = (...parts) =>
-  readFileSync(join(__dirname, "..", ...parts), "utf8")
+/** @param {string} file */
+const readCode = (file) =>
+  readFileSync(join(__dirname, "..", file), "utf8")
     // Comments here discuss the pattern they forbid.
-    .replace(/^\s*(\/\/|#).*$/gm, "");
+    .replace(/^\s*\/\/.*$/gm, "");
 
 describe("exit codes on Windows", () => {
   it("check-version.js sets process.exitCode rather than exiting", () => {
@@ -24,13 +25,5 @@ describe("exit codes on Windows", () => {
 
     assert(!ExitCall.test(source), "process.exit() races undici teardown");
     assert(/process\.exitCode\s*=/.test(source));
-  });
-
-  it("the read-only update workflow delegates to the guarded script", () => {
-    const workflow = readCode(".github", "workflows", "check-updates.yml");
-
-    assert(!ExitCall.test(workflow), "process.exit() races undici teardown");
-    assert(/npm run check-version/.test(workflow));
-    assert(!/create-pull-request/.test(workflow));
   });
 });

@@ -50,10 +50,7 @@ This module follows the ExifTool versioning with an additional patch number when
 
 ### Update Detection
 
-1. **GitHub Actions** checks for ExifTool updates daily at 12 PM UTC
-   - Workflow: `.github/workflows/check-updates.yml`
-   - The workflow is read-only and fails when a new version is available
-   - Manual runs must use the default branch
+1. **Check**: `npm run check-version` exits 1 when a newer ExifTool is available. Nothing runs it on a schedule
 
 2. **Manual Update Process**:
    - Run `npm run update:exiftool` to fetch and install the latest ExifTool binary
