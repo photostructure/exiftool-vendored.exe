@@ -288,7 +288,7 @@ jobs:
       # Create the release only once npm serves the version, so the watcher
       # email announces an installable package.
       - name: Wait for the npm stage approval
-        uses: photostructure/changelog-release-action@2319f91de9a32bccbb3996cd674df93ba5160d1a # v0.2.0
+        uses: photostructure/changelog-release-action@92acc67a08c30e5dae96e7b8c0fc4585d2af3aa2 # v0.3.1
         with:
           command: wait-for-npm
           tag: ${{ github.ref_name }}
