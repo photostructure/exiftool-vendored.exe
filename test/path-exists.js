@@ -3,13 +3,8 @@ const { spawn, spawnSync } = require("node:child_process");
 const assert = require("node:assert");
 const os = require("node:os");
 const nodePath = require("node:path");
-const pkg = require("../package.json");
 const { requireMatchingArchiveVersion } = require("../update-exiftool");
-const {
-  exiftoolMajorMinor,
-  packageFollowsExifTool,
-  requiredPackageVersionRepair,
-} = require("../lib/package-version");
+const { exiftoolMajorMinor } = require("../lib/package-version");
 
 // The vendored ExifTool's version as `exiftool -ver` prints it, such as
 // "14.05". The package version can't supply it: ExifTool 14.05 ships as
@@ -344,21 +339,6 @@ describe("exported path", () => {
 });
 
 describe("update-exiftool.js", () => {
-  it("runs npm version in the package directory", () => {
-    // run() downloads from exiftool.org, so no offline test reaches this
-    // spawn. Check that it sets cwd, as the updater's other paths use
-    // __dirname.
-    const source = fs.readFileSync(
-      nodePath.join(__dirname, "..", "update-exiftool.js"),
-      "utf8",
-    );
-    assert.match(source, /spawnSync\(\s*"npm",[^)]*?cwd: __dirname,/);
-  });
-
-  it("vendors the ExifTool that the package version names", () => {
-    assert(packageFollowsExifTool(pkg.version, exiftoolVersion));
-  });
-
   it("rejects a download whose archive and latest tag disagree", () => {
     // Ground truth: curl -fsSL https://exiftool.org/rss.xml | grep -F
     // "exiftool-13.59_64.zip" shows the official x64 archive naming scheme.
@@ -378,29 +358,6 @@ describe("update-exiftool.js", () => {
           exiftoolVersion,
         ),
       /does not match archive/,
-    );
-  });
-
-  it("repairs package metadata left stale by an interrupted update", () => {
-    const currentLock = {
-      version: pkg.version,
-      packages: { "": { version: pkg.version } },
-    };
-    assert.strictEqual(
-      requiredPackageVersionRepair(pkg.version, currentLock, exiftoolVersion),
-      null,
-    );
-    assert.strictEqual(
-      requiredPackageVersionRepair("13.58.0", currentLock, exiftoolVersion),
-      `${major}.${minor}.0-pre`,
-    );
-    assert.strictEqual(
-      requiredPackageVersionRepair(
-        pkg.version,
-        { ...currentLock, version: "13.58.0" },
-        exiftoolVersion,
-      ),
-      pkg.version,
     );
   });
 });

@@ -14,9 +14,9 @@ heading that names the release's version.
   changes the heading to `## [Unreleased (13.61.0)]` and adds
   `- 📦 Updated ExifTool to [13.61](https://exiftool.org/history.html#v13.61).`,
   or replaces that line if an earlier update was never released. Commit
-  `CHANGELOG.md` with the updated `bin/` and package metadata. If the
-  heading is missing or names minor or major, the update stops before it
-  replaces `bin/` and says what to change.
+  `CHANGELOG.md` with the updated `bin/`. If the heading is missing or names
+  minor or major, the update stops before it replaces `bin/` and says what to
+  change.
 - For a package-only release, write the note by hand: rename
   `## [Unreleased]` to `## [Unreleased (13.61.1)]`, the next patch version,
   and list the changes under it. `## [Unreleased (patch)]` does the same.

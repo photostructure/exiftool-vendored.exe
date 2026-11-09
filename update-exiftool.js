@@ -27,7 +27,6 @@ const {
 } = require("./lib/version-utils");
 const { patchFiles } = require("./lib/vendor-patch-set");
 const { noteExifToolUpdate } = require("./lib/changelog");
-const { requiredPackageVersionRepair } = require("./lib/package-version");
 
 // Currently is "12.88", but "13.1" is valid.
 
@@ -195,21 +194,13 @@ async function run() {
   const packageJson = JSON.parse(
     await readFile(join(__dirname, "package.json"), "utf8"),
   );
-  const packageLock = JSON.parse(
-    await readFile(join(__dirname, "package-lock.json"), "utf8"),
-  );
-  const packageVersionRepair = requiredPackageVersionRepair(
-    packageJson.version,
-    packageLock,
-    archiveVersion,
-  );
   // Build the CHANGELOG.md note now, so a heading the release would refuse
   // stops the update before it replaces bin/.
   const changelogPath = join(__dirname, "CHANGELOG.md");
   const changelog = await readFile(changelogPath, "utf8");
   const notedChangelog = noteExifToolUpdate(
     changelog,
-    packageVersionRepair ?? packageJson.version,
+    packageJson.version,
     archiveVersion,
   );
 
@@ -296,36 +287,6 @@ async function run() {
   if (notedChangelog !== changelog) {
     console.log(`Noting ExifTool ${version} in CHANGELOG.md`);
     await writeFile(changelogPath, notedChangelog);
-  }
-
-  if (packageVersionRepair != null) {
-    console.log(
-      "Updating package.json and package-lock.json to version " +
-        packageVersionRepair,
-    );
-    // Note: shell: true is required on Windows for npm command to work properly
-    const npmVersion = spawnSync(
-      "npm",
-      [
-        "version",
-        "--no-git-tag-version",
-        packageVersionRepair,
-        "--ignore-scripts",
-        "--allow-same-version",
-      ],
-      {
-        cwd: __dirname,
-        shell: process.platform === "win32",
-      },
-    );
-    if (npmVersion.error) {
-      throw new Error("npm version failed: " + npmVersion.error.message);
-    }
-    if (npmVersion.status !== 0) {
-      throw new Error(
-        "npm version failed: " + npmVersion.stderr?.toString().trim(),
-      );
-    }
   }
 }
 

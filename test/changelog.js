@@ -4,6 +4,7 @@ const { join } = require("node:path");
 const { noteExifToolUpdate } = require("../lib/changelog");
 
 const Header = "# Changelog\n\nSome intro.\n\n";
+const LastRelease = "13.60.0";
 const Released =
   "## [13.60.0] - 2026-10-28\n\n- 📦 Updated ExifTool to [13.60](https://exiftool.org/history.html#v13.60).\n\n[13.60.0]: https://github.com/photostructure/exiftool-vendored.exe/releases/tag/13.60.0\n";
 
@@ -12,7 +13,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
     assert.strictEqual(
       noteExifToolUpdate(
         Header + "## [Unreleased]\n\n" + Released,
-        "13.61.0-pre",
+        LastRelease,
         "13.61",
       ),
       Header +
@@ -24,7 +25,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
 
   it("adds the note to a changelog whose only section is Unreleased", () => {
     assert.strictEqual(
-      noteExifToolUpdate(Header + "## [Unreleased]\n", "13.61.0-pre", "13.61"),
+      noteExifToolUpdate(Header + "## [Unreleased]\n", LastRelease, "13.61"),
       Header +
         "## [Unreleased (13.61.0)]\n\n" +
         "- 📦 Updated ExifTool to [13.61](https://exiftool.org/history.html#v13.61).\n",
@@ -37,7 +38,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
         Header +
           "## [Unreleased (patch)]\n\n- 🐞 Fixed a thing.\n\n" +
           Released,
-        "13.61.0-pre",
+        LastRelease,
         "13.61",
       ),
       Header +
@@ -56,7 +57,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
           "- 🐞 Fixed a thing.\n" +
           "- 📦 Updated ExifTool to [13.61](https://exiftool.org/history.html#v13.61).\n\n" +
           Released,
-        "13.62.0-pre",
+        LastRelease,
         "13.62",
       ),
       Header +
@@ -73,7 +74,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
         Header +
           "## [Unreleased (13.60.1)]\n\n- 🐞 Fixed a thing.\n\n" +
           Released,
-        "13.61.0-pre",
+        LastRelease,
         "13.61",
       ),
       Header +
@@ -88,37 +89,35 @@ describe("CHANGELOG.md ExifTool update note", () => {
     // changelog-release-action v0.3.0's bump refuses "14.05.0" ("an exact
     // version without leading zeros"); ExifTool names the release 14.05.
     assert.strictEqual(
-      noteExifToolUpdate(Header + "## [Unreleased]\n", "14.05.0-pre", "14.05"),
+      noteExifToolUpdate(Header + "## [Unreleased]\n", LastRelease, "14.05"),
       Header +
         "## [Unreleased (14.5.0)]\n\n" +
         "- 📦 Updated ExifTool to [14.05](https://exiftool.org/history.html#v14.05).\n",
     );
   });
 
-  it("keeps a zero-padded note when package.json already has npm's 14.5.0-pre", () => {
-    // `npm version 14.05.0-pre` writes 14.5.0-pre, so a re-run sees that.
+  it("keeps a zero-padded note when the update runs again", () => {
     const once = noteExifToolUpdate(
       Header + "## [Unreleased]\n",
-      "14.05.0-pre",
+      LastRelease,
       "14.05",
     );
-    assert.strictEqual(noteExifToolUpdate(once, "14.5.0-pre", "14.05"), once);
+    assert.strictEqual(noteExifToolUpdate(once, LastRelease, "14.05"), once);
   });
 
   it("changes nothing when the update runs again for the same version", () => {
     const once = noteExifToolUpdate(
       Header + "## [Unreleased]\n\n" + Released,
-      "13.61.0-pre",
+      LastRelease,
       "13.61",
     );
-    assert.strictEqual(noteExifToolUpdate(once, "13.61.0-pre", "13.61"), once);
+    assert.strictEqual(noteExifToolUpdate(once, LastRelease, "13.61"), once);
   });
 
-  it("leaves the changelog alone when no new ExifTool was vendored", () => {
-    // update-exiftool.js keeps a released version such as 13.60.0 when the
-    // latest ExifTool is the one already vendored.
+  it("leaves the changelog alone when this ExifTool is already released", () => {
     const text = Header + "## [Unreleased]\n\n" + Released;
     assert.strictEqual(noteExifToolUpdate(text, "13.60.0", "13.60"), text);
+    assert.strictEqual(noteExifToolUpdate(text, "14.5.0", "14.05"), text);
     assert.strictEqual(
       noteExifToolUpdate("not a changelog", "13.60.1", "13.60"),
       "not a changelog",
@@ -127,7 +126,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
 
   it("asks for an Unreleased heading when there is none", () => {
     assert.throws(
-      () => noteExifToolUpdate(Header + Released, "13.61.0-pre", "13.61"),
+      () => noteExifToolUpdate(Header + Released, LastRelease, "13.61"),
       /CHANGELOG\.md has no "## \[Unreleased\]" heading/,
     );
   });
@@ -140,7 +139,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
             Header +
               `## [Unreleased (${bump})]\n\n- ✨ Added a thing.\n\n` +
               Released,
-            "13.61.0-pre",
+            LastRelease,
             "13.61",
           ),
         new RegExp(
@@ -156,7 +155,7 @@ describe("CHANGELOG.md ExifTool update note", () => {
     // anywhere in the Unreleased section rather than right after the heading.
     const section =
       /^## \[Unreleased \(99\.1\.0\)\]\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(
-        noteExifToolUpdate(text, "99.1.0-pre", "99.1"),
+        noteExifToolUpdate(text, LastRelease, "99.1"),
       )?.[1];
     assert.ok(section != null, "no ## [Unreleased (99.1.0)] section");
     assert.match(

@@ -152,7 +152,7 @@ jobs:
             }
             if (!packageFollowsExifTool(pkg.version, exiftoolVersion)) {
               const [major, minor] = exiftoolMajorMinor(exiftoolVersion)
-              throw new Error("Package " + pkg.version + " does not match ExifTool " + exiftoolVersion + ". Change the CHANGELOG.md heading to ## [Unreleased (patch)], or to the next " + major + "." + minor + ".N version.")
+              throw new Error("Package " + pkg.version + " does not match ExifTool " + exiftoolVersion + ". Change the CHANGELOG.md heading to the next " + major + "." + minor + ".N version.")
             }
           '
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
