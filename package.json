@@ -40,7 +40,7 @@
     "check:npm-version": "node scripts/check-npm-version.js",
     "preupdate": "npm run check:npm-version",
     "update": "run-s update:*",
-    "update:deps": "npm run check:npm-version && npm-check-updates --upgrade --install always",
+    "update:deps": "npm run check:npm-version && npm-check-updates --upgrade --install never && node scripts/install-deps.js",
     "update:exiftool": "node update-exiftool.js",
     "check-version": "node check-version.js",
     "install:pinact": "go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.1.0",
