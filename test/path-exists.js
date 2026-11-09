@@ -3,7 +3,10 @@ const { spawn, spawnSync } = require("node:child_process");
 const assert = require("node:assert");
 const os = require("node:os");
 const nodePath = require("node:path");
-const { requireMatchingArchiveVersion } = require("../update-exiftool");
+const {
+  renameWithRetry,
+  requireMatchingArchiveVersion,
+} = require("../update-exiftool");
 const { exiftoolMajorMinor } = require("../lib/package-version");
 
 // The vendored ExifTool's version as `exiftool -ver` prints it, such as
@@ -359,5 +362,47 @@ describe("update-exiftool.js", () => {
         ),
       /does not match archive/,
     );
+  });
+
+  describe("renameWithRetry", () => {
+    function renameFailing(failures, code) {
+      const calls = { renames: 0, delays: [] };
+      const impl = {
+        renameImpl: async () => {
+          calls.renames++;
+          if (calls.renames <= failures) {
+            throw Object.assign(new Error("rename failed"), { code });
+          }
+        },
+        delayImpl: async (ms) => {
+          calls.delays.push(ms);
+        },
+      };
+      return { calls, impl };
+    }
+
+    it("retries EPERM until the rename succeeds", async () => {
+      const { calls, impl } = renameFailing(2, "EPERM");
+      await renameWithRetry("from", "to", impl);
+      assert.strictEqual(calls.renames, 3);
+      assert.deepStrictEqual(calls.delays, [1000, 1000]);
+    });
+
+    it("rejects with EPERM after five retries", async () => {
+      const { calls, impl } = renameFailing(Infinity, "EPERM");
+      await assert.rejects(renameWithRetry("from", "to", impl), {
+        code: "EPERM",
+      });
+      assert.strictEqual(calls.renames, 6);
+    });
+
+    it("does not retry other errors", async () => {
+      const { calls, impl } = renameFailing(Infinity, "ENOENT");
+      await assert.rejects(renameWithRetry("from", "to", impl), {
+        code: "ENOENT",
+      });
+      assert.strictEqual(calls.renames, 1);
+      assert.deepStrictEqual(calls.delays, []);
+    });
   });
 });

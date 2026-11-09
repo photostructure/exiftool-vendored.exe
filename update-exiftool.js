@@ -18,6 +18,7 @@ const {
 } = require("node:fs/promises");
 const { join } = require("node:path");
 const { pipeline } = require("node:stream/promises");
+const { setTimeout: delay } = require("node:timers/promises");
 
 const xml2js = require("xml2js");
 const { unzip } = require("cross-zip");
@@ -132,6 +133,36 @@ function requireMatchingArchiveVersion(basename, latestVersion) {
     );
   }
   return archiveVersion;
+}
+
+const RENAME_MAX_RETRIES = 5;
+const RENAME_RETRY_DELAY_MS = 1000;
+
+/**
+ * Windows answers EPERM when a directory is renamed while a file inside it is
+ * held open. On a Windows 11 checkout, 12 of 15 renames made right after
+ * extraction and patching got EPERM on the first attempt, and each succeeded
+ * within 106 ms of retrying. What held the tree was not identified. This makes
+ * as many retries as the rm() calls in run(), at a fixed delay: 5 s in total.
+ *
+ * @param {string} from
+ * @param {string} to
+ * @param {{ renameImpl?: typeof rename, delayImpl?: (ms: number) => Promise<unknown> }} [impl]
+ */
+async function renameWithRetry(
+  from,
+  to,
+  { renameImpl = rename, delayImpl = delay } = {},
+) {
+  for (let retries = 0; ; retries++) {
+    try {
+      return await renameImpl(from, to);
+    } catch (e) {
+      const { code } = /** @type {NodeJS.ErrnoException} */ (e);
+      if (code !== "EPERM" || retries === RENAME_MAX_RETRIES) throw e;
+      await delayImpl(RENAME_RETRY_DELAY_MS);
+    }
+  }
 }
 
 /**
@@ -251,7 +282,7 @@ async function run() {
     maxRetries: 5,
     retryDelay: 1000,
   });
-  await rename(expectedZipOutDir, destDir);
+  await renameWithRetry(expectedZipOutDir, destDir);
   await rename(
     join(__dirname, "bin", "exiftool(-k).exe"),
     join(__dirname, "bin", "exiftool.exe"),
@@ -295,5 +326,6 @@ if (require.main === module) {
 }
 
 module.exports = {
+  renameWithRetry,
   requireMatchingArchiveVersion,
 };
