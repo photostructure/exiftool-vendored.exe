@@ -1,0 +1,182 @@
+name: Update ExifTool
+
+# Opens or refreshes one pull request that updates ExifTool. The jobs that
+# download and run ExifTool have no write permissions; the job that can push
+# and open the pull request runs none of the downloaded code.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: update-exiftool-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check for a newer ExifTool
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      # package.json declares "os": ["win32"], so npm refuses to install on
+      # Linux without --force.
+      npm_config_force: "true"
+    outputs:
+      update_needed: ${{ steps.check.outputs.update_needed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Node.js toolchain
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.18.1
+          package-manager-cache: false
+      - name: Install the frozen lockfile
+        run: npm ci
+      - name: Compare the vendored and latest ExifTool versions
+        id: check
+        run: |
+          node -e '
+            const { appendFileSync } = require("node:fs")
+            const { checkForUpdate } = require("./lib/version-utils")
+            checkForUpdate().then(({ latestVersion, updateAvailable }) => {
+              if (!/^\d+\.\d+$/.test(latestVersion)) {
+                throw new Error("Unexpected latest ExifTool version: " + latestVersion)
+              }
+              console.log("Latest ExifTool: " + latestVersion + ", update needed: " + updateAvailable)
+              appendFileSync(
+                process.env.GITHUB_OUTPUT,
+                "update_needed=" + updateAvailable + "\nversion=" + latestVersion + "\n",
+              )
+            })
+          '
+
+  update:
+    name: Update ExifTool ${{ needs.check.outputs.version }}
+    runs-on: ubuntu-24.04
+    needs: check
+    if: ${{ needs.check.outputs.update_needed == 'true' }}
+    permissions:
+      contents: read
+    env:
+      npm_config_force: "true"
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Node.js toolchain
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.18.1
+          package-manager-cache: false
+      - name: Install the frozen lockfile
+        run: npm ci
+      - name: Download, verify, and patch ExifTool
+        run: npm run update:exiftool
+      - run: npm run lint
+      # The tests that run exiftool.exe run in test-windows.
+      - run: npm test
+      - name: Archive the updated files
+        # One tar file lets later jobs replace bin/ exactly, deletions
+        # included, and lets the open-pr job check every entry first.
+        run: |
+          mkdir exiftool-update
+          tar -cf exiftool-update/exiftool-update.tar bin CHANGELOG.md
+      - name: Upload the updated files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: exiftool-update
+          path: exiftool-update/exiftool-update.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  test-windows:
+    name: Test ExifTool ${{ needs.check.outputs.version }} on Windows
+    runs-on: windows-latest
+    needs: [check, update]
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Node.js toolchain
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.18.1
+          package-manager-cache: false
+      - name: Download the updated files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: exiftool-update
+          path: exiftool-update
+      - name: Replace bin/ and CHANGELOG.md
+        run: |
+          rm -rf bin
+          tar -xf exiftool-update/exiftool-update.tar
+          rm -rf exiftool-update
+      - name: Install the frozen lockfile
+        run: npm ci
+      - run: npm test
+
+  open-pr:
+    name: Open the ExifTool update pull request
+    runs-on: ubuntu-24.04
+    needs: [check, update, test-windows]
+    permissions:
+      contents: write # Push the signed update branch.
+      pull-requests: write # Open or refresh the update pull request.
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the updated files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: exiftool-update
+          path: exiftool-update
+      - name: Replace bin/ and CHANGELOG.md
+        # The archive comes from a job that ran the downloaded ExifTool, so
+        # accept only regular files and directories under bin/ and CHANGELOG.md,
+        # with no .. and no nested .git, which git would commit as a submodule.
+        run: |
+          ARCHIVE=exiftool-update/exiftool-update.tar
+          if tar -tvf "$ARCHIVE" | grep -v '^[-d]'; then
+            echo "::error::The update archive holds something other than regular files and directories"
+            exit 1
+          fi
+          if tar -tf "$ARCHIVE" | grep -Ev '^(bin(/.*)?|CHANGELOG\.md)$' ||
+             tar -tf "$ARCHIVE" | grep -E '(^|/)(\.\.|\.git)(/|$)'; then
+            echo "::error::The update archive holds paths outside bin/ and CHANGELOG.md"
+            exit 1
+          fi
+          rm -rf bin
+          tar -xf "$ARCHIVE" --no-same-owner
+          rm -rf exiftool-update
+      - name: Open or refresh the pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          add-paths: |
+            bin
+            CHANGELOG.md
+          sign-commits: true
+          branch: exiftool-update
+          commit-message: "chore(exiftool): update to ${{ needs.check.outputs.version }}"
+          title: "chore(exiftool): update to ${{ needs.check.outputs.version }}"
+          body: |
+            Updates the vendored ExifTool to [${{ needs.check.outputs.version }}](https://exiftool.org/history.html#v${{ needs.check.outputs.version }}).
+
+            [This workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) applied the update on ubuntu-24.04, ran `npm run lint` and `npm test` there, and ran `npm test` with `exiftool.exe` on windows-latest. GitHub doesn't start other workflows for a pull request opened with `GITHUB_TOKEN`, so **Build & Prepare Release** tests the update on `main` after the merge.
+
+            After the merge, follow `RELEASING.md`.

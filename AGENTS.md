@@ -49,9 +49,9 @@ This module follows the ExifTool versioning with an additional patch number when
 
 ### Update Detection
 
-1. **Check**: `npm run check-version` exits 1 when a newer ExifTool is available. Nothing runs it on a schedule
+1. **Check**: `npm run check-version` exits 1 when a newer ExifTool is available. The **Update ExifTool** workflow (`update-exiftool.yml`) runs only when dispatched: `gh workflow run update-exiftool.yml`. When a newer ExifTool is available, jobs without write permissions run `npm run update:exiftool`, `npm run lint`, and `npm test` on ubuntu-24.04 (with `npm_config_force=true`, because of `"os": ["win32"]`) and `npm test` on windows-latest; a separate job then opens or refreshes the pull request from the `exiftool-update` branch, changing only `bin/` and `CHANGELOG.md`. The repository setting **Allow GitHub Actions to create and approve pull requests** must be on, or the last job fails
 
-2. **Manual Update Process**:
+2. **Local Update Process**:
    - Run `npm run update:exiftool` to fetch and install the latest ExifTool binary
    - Run the update from Git Bash, included with Git for Windows, so GNU `bash` and `patch` are available
    - The script applies every `patches/*.patch` file with zero fuzz and stops before replacing `bin/` if any patch fails
@@ -68,7 +68,8 @@ unchanged.
 
 ### Release Process
 
-1. Review and commit the locally generated update, or, for a package-only
+1. Merge the update pull request, or review and commit a locally generated
+   update, or, for a package-only
    release, write its note by hand in `CHANGELOG.md` under
    `## [Unreleased (13.26.1)]`, the next patch version
 2. Go to the Actions tab on GitHub
